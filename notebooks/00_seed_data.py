@@ -1,0 +1,813 @@
+# Databricks notebook source
+
+# COMMAND ----------
+# MAGIC %md
+# MAGIC # Site Feasibility Workbench — Seed Data Notebook
+# MAGIC
+# MAGIC Generates all ten Unity Catalog Delta tables required by the
+# MAGIC **Site Feasibility Workbench** Databricks App with fully-synthetic,
+# MAGIC realistic data covering 16 clinical trials across three therapeutic areas.
+# MAGIC
+# MAGIC Run once on any single-node cluster (DBR 13+, no extra libraries needed).
+# MAGIC
+# MAGIC **Parameters**
+# MAGIC | Widget | Default | Description |
+# MAGIC |--------|---------|-------------|
+# MAGIC | `catalog` | `my_catalog` | Unity Catalog to write tables into |
+# MAGIC
+# MAGIC **Tables created**
+# MAGIC | Schema | Table | ~Rows |
+# MAGIC |--------|-------|-------|
+# MAGIC | `ctms_data` | `ctms_site_geo` | 120 |
+# MAGIC | `clinicaltrials_gov` | `facilities` | ~900 |
+# MAGIC | `ctgov_gold` | `trials` | ~360 |
+# MAGIC | `clinicaltrials_gov` | `conditions` | ~360 |
+# MAGIC | `ml_features` | `gold_rwe_patient_access` | ~1 440 |
+# MAGIC | `ml_features` | `gold_model_predictions` | 300 |
+# MAGIC | `ml_features` | `gold_shap_values` | ~1 500 |
+# MAGIC | `ml_features` | `gold_feasibility_dimension_drivers` | ~3 600 |
+# MAGIC | `ml_features` | `gold_site_feasibility_scores` | 300 |
+# MAGIC | `healthverity` | `claims_sample_synthetic` | ~2 000 |
+# MAGIC
+# MAGIC **After running**, update your `app.yaml` environment variables:
+# MAGIC ```yaml
+# MAGIC UC_CATALOG: <your_catalog>
+# MAGIC HEALTHVERITY_TABLE: <your_catalog>.healthverity.claims_sample_synthetic
+# MAGIC ```
+
+# COMMAND ----------
+dbutils.widgets.text("catalog", "my_catalog", "Target Unity Catalog")
+CATALOG = dbutils.widgets.get("catalog").strip()
+
+if not CATALOG or CATALOG == "my_catalog":
+    raise ValueError(
+        "Set the 'catalog' widget to your Unity Catalog name before running.\n"
+        "Example: my_org_catalog"
+    )
+
+print(f"Seeding into catalog: {CATALOG}")
+
+# COMMAND ----------
+import random
+import math
+from pyspark.sql import Row
+from pyspark.sql.types import (
+    StructType, StructField,
+    StringType, IntegerType, DoubleType, LongType,
+)
+
+random.seed(42)
+
+# COMMAND ----------
+# ── Create schemas ──────────────────────────────────────────────────────────────
+for schema in ["clinicaltrials_gov", "ctgov_gold", "ml_features", "ctms_data", "healthverity"]:
+    spark.sql(f"CREATE SCHEMA IF NOT EXISTS {CATALOG}.{schema}")
+    print(f"  schema ready: {CATALOG}.{schema}")
+
+# COMMAND ----------
+# ── Study metadata ──────────────────────────────────────────────────────────────
+# 16 synthetic clinical trials across CNS, Oncology, and Rare Disease TAs.
+# Study IDs match the backbone used by the app's Protocol Explorer view.
+
+STUDIES = {
+    "CDISCPILOT01": {"ta": "CNS",          "indication": "Alzheimer's Disease",            "condition_code": "G30"},
+    "SYNAL01":      {"ta": "CNS",          "indication": "ALS (Amyotrophic Lateral Sclerosis)", "condition_code": "G12"},
+    "SYNAL02":      {"ta": "CNS",          "indication": "ALS (Amyotrophic Lateral Sclerosis)", "condition_code": "G12"},
+    "SYNMS01":      {"ta": "CNS",          "indication": "Multiple Sclerosis",             "condition_code": "G35"},
+    "SYNPD01":      {"ta": "CNS",          "indication": "Parkinson's Disease",            "condition_code": "G20"},
+    "SYNPD02":      {"ta": "CNS",          "indication": "Parkinson's Disease",            "condition_code": "G20"},
+    "SYNONC01":     {"ta": "Oncology",     "indication": "Non-Small Cell Lung Cancer",     "condition_code": "C34"},
+    "SYNONC02":     {"ta": "Oncology",     "indication": "Non-Small Cell Lung Cancer",     "condition_code": "C34"},
+    "SYNONC03":     {"ta": "Oncology",     "indication": "Breast Cancer",                  "condition_code": "C50"},
+    "SYNONC04":     {"ta": "Oncology",     "indication": "Colorectal Cancer",              "condition_code": "C18"},
+    "SYNONC05":     {"ta": "Oncology",     "indication": "Ovarian Cancer",                "condition_code": "C56"},
+    "SYNONC06":     {"ta": "Oncology",     "indication": "Breast Cancer",                  "condition_code": "C50"},
+    "SYNRD01":      {"ta": "Rare Disease", "indication": "Gaucher Disease Type 1",         "condition_code": "E75"},
+    "SYNRD02":      {"ta": "Rare Disease", "indication": "Fabry Disease",                  "condition_code": "E75"},
+    "SYNRD03":      {"ta": "Rare Disease", "indication": "Pompe Disease",                  "condition_code": "E74"},
+    "SYNRD04":      {"ta": "Rare Disease", "indication": "Sickle Cell Disease",            "condition_code": "D57"},
+}
+
+# Number of sites (study_id × site_id rows) per study
+STUDY_SITE_COUNTS = {
+    "CDISCPILOT01": 22, "SYNAL01": 22, "SYNAL02": 18,
+    "SYNMS01": 22, "SYNPD01": 20, "SYNPD02": 16,
+    "SYNONC01": 28, "SYNONC02": 24, "SYNONC03": 26,
+    "SYNONC04": 22, "SYNONC05": 26, "SYNONC06": 24,
+    "SYNRD01": 9,  "SYNRD02": 9,  "SYNRD03": 6, "SYNRD04": 6,
+}
+# Total = 300 rows in gold_site_feasibility_scores
+
+# US states: (state_abbr, representative_zip3_prefix)
+US_STATES = [
+    ("AL","207"), ("AZ","850"), ("CA","900"), ("CO","800"), ("CT","060"),
+    ("FL","320"), ("GA","300"), ("IL","606"), ("IN","460"), ("KY","400"),
+    ("LA","701"), ("MA","021"), ("MD","210"), ("MI","480"), ("MN","550"),
+    ("MO","630"), ("NC","275"), ("NJ","070"), ("NM","871"), ("NY","100"),
+    ("OH","432"), ("OR","972"), ("PA","190"), ("SC","290"), ("TN","370"),
+    ("TX","750"), ("UT","841"), ("VA","230"), ("WA","980"), ("WI","532"),
+]
+
+INTL_COUNTRIES = ["Canada", "Germany", "United Kingdom", "France", "Spain", "Australia"]
+
+SSQ_STATUSES = ["SELECTED", "NOT_SELECTED", "DISQUALIFIED", "NONE"]
+SSQ_WEIGHTS  = [0.45, 0.25, 0.10, 0.20]
+
+# Top SHAP features used in the stall prediction model
+SHAP_FEATURES = [
+    ("pct_enrolled_age_65_plus",      "% Enrolled Age 65+"),
+    ("avg_monthly_rands_12m",         "Avg Monthly Randomizations (12m)"),
+    ("screen_failure_rate",           "Screen Failure Rate"),
+    ("protocol_deviation_rate",       "Protocol Deviation Rate"),
+    ("site_npi_density_score",        "NPI Physician Density Score"),
+    ("open_payments_research_score",  "Open Payments Research Engagement"),
+    ("concurrent_trial_burden",       "Concurrent Trial Burden"),
+    ("months_since_activation",       "Months Since Site Activation"),
+    ("enrollment_velocity_ratio",     "Enrollment Velocity Ratio"),
+    ("ssq_prior_selection_rate",      "SSQ Prior Selection Rate"),
+]
+
+# Dimension driver features (keys must match result dict in get_site_drivers: rwe, op, sel, proto)
+DIM_FEATURES = {
+    "rwe":   [
+        ("patient_count_state",    "Patient Count in State",          "patients"),
+        ("rwe_pctile_rank",        "RWE Percentile Rank",             "pct"),
+        ("indication_prevalence",  "Indication Prevalence (State)",   "pct"),
+    ],
+    "op":    [
+        ("stall_prob",             "Predicted Stall Probability",     "pct"),
+        ("velocity_ratio",         "Enrollment Velocity vs Benchmark","ratio"),
+        ("months_active",          "Months Since Activation",         "months"),
+    ],
+    "sel":   [
+        ("site_npi_density_score", "NPI Physician Density",           "score"),
+        ("open_payments_research_score", "Open Payments Research Score", "score"),
+        ("ssq_prior_selection_rate",     "SSQ Historical Selection Rate", "pct"),
+    ],
+    "proto": [
+        ("screen_failure_rate",    "Screen Failure Rate",             "pct"),
+        ("protocol_deviation_rate","Protocol Deviation Rate",         "per_100"),
+        ("conversion_rate",        "Screen-to-Enroll Conversion",     "pct"),
+    ],
+}
+
+# COMMAND ----------
+# ── Site registry ───────────────────────────────────────────────────────────────
+# 100 US sites + 20 international sites = 120 unique sites
+US_SITE_IDS  = [f"SITE{i:03d}" for i in range(1, 101)]
+INT_SITE_IDS = [f"INTSITE{i:02d}" for i in range(1, 21)]
+ALL_SITE_IDS = US_SITE_IDS + INT_SITE_IDS
+
+# Each US site maps to a state (spread across all 30 states)
+_site_state_map = {}
+for i, sid in enumerate(US_SITE_IDS):
+    state, zip3_base = US_STATES[i % len(US_STATES)]
+    zip3 = str(int(zip3_base) + random.randint(0, 9)).zfill(3)
+    _site_state_map[sid] = (state, zip3)
+
+# Assign each international site a country
+_site_country_map = {}
+for i, sid in enumerate(INT_SITE_IDS):
+    _site_country_map[sid] = INTL_COUNTRIES[i % len(INTL_COUNTRIES)]
+
+# Per-study site pools: CNS/Oncology = US-heavy, Rare = US-only small pool
+def _study_site_pool(study_id: str, n: int) -> list:
+    """Return n site IDs for the given study based on its TA and geography."""
+    meta = STUDIES[study_id]
+    if meta["ta"] == "Rare Disease":
+        pool = US_SITE_IDS[:60]  # Rare: smaller, US-only specialty centers
+    elif meta["ta"] == "Oncology" and "Global" in ["Global"]:
+        pool = ALL_SITE_IDS  # Oncology: includes international sites
+    else:
+        pool = US_SITE_IDS   # CNS: US-focused
+    rng = random.Random(hash(study_id) & 0xFFFFFF)
+    return rng.sample(pool, min(n, len(pool)))
+
+# Build complete (study_id, site_id) pairs
+study_site_pairs = []
+for study_id, n in STUDY_SITE_COUNTS.items():
+    for sid in _study_site_pool(study_id, n):
+        study_site_pairs.append((study_id, sid))
+
+print(f"Total study×site pairs: {len(study_site_pairs)}")
+print(f"Unique sites in use:    {len({sid for _, sid in study_site_pairs})}")
+
+# COMMAND ----------
+# ── Table 1: ctms_data.ctms_site_geo ──────────────────────────────────────────
+# One row per unique site with US state / ZIP3 / country geography.
+# The app joins this to feasibility_scores and rwe_patient_access.
+
+geo_rows = []
+for sid in US_SITE_IDS:
+    state, zip3 = _site_state_map[sid]
+    geo_rows.append(Row(site_id=sid, us_state=state, us_zip3=zip3, country="US"))
+for sid in INT_SITE_IDS:
+    geo_rows.append(Row(site_id=sid, us_state=None, us_zip3=None,
+                        country=_site_country_map[sid]))
+
+geo_schema = StructType([
+    StructField("site_id",  StringType(), False),
+    StructField("us_state", StringType(), True),
+    StructField("us_zip3",  StringType(), True),
+    StructField("country",  StringType(), True),
+])
+spark.createDataFrame(geo_rows, geo_schema) \
+    .write.format("delta").mode("overwrite") \
+    .saveAsTable(f"{CATALOG}.ctms_data.ctms_site_geo")
+print(f"ctms_site_geo: {len(geo_rows)} rows")
+
+# COMMAND ----------
+# ── Tables 2–4: CTGov trials, facilities, conditions ──────────────────────────
+# Synthetic ClinicalTrials.gov data representing the publicly available
+# competitor landscape used in the Protocol Explorer map overlay.
+
+# Major research hub coordinates: (city, country, lat, lng)
+RESEARCH_HUBS = [
+    ("New York",        "United States",   40.71, -74.01),
+    ("Los Angeles",     "United States",   34.05, -118.24),
+    ("Chicago",         "United States",   41.88, -87.63),
+    ("Houston",         "United States",   29.76, -95.37),
+    ("Boston",          "United States",   42.36, -71.06),
+    ("Philadelphia",    "United States",   39.95, -75.17),
+    ("San Francisco",   "United States",   37.77, -122.42),
+    ("Seattle",         "United States",   47.61, -122.33),
+    ("Dallas",          "United States",   32.78, -96.80),
+    ("Atlanta",         "United States",   33.75, -84.39),
+    ("Denver",          "United States",   39.74, -104.98),
+    ("Miami",           "United States",   25.77, -80.19),
+    ("Minneapolis",     "United States",   44.98, -93.27),
+    ("Nashville",       "United States",   36.17, -86.78),
+    ("Toronto",         "Canada",         43.65, -79.38),
+    ("Montreal",        "Canada",         45.50, -73.57),
+    ("London",          "United Kingdom", 51.51, -0.13),
+    ("Manchester",      "United Kingdom", 53.48, -2.24),
+    ("Paris",           "France",         48.86,  2.35),
+    ("Berlin",          "Germany",        52.52, 13.41),
+    ("Munich",          "Germany",        48.14, 11.58),
+    ("Madrid",          "Spain",          40.42, -3.70),
+    ("Barcelona",       "Spain",          41.39,  2.15),
+    ("Sydney",          "Australia",     -33.87, 151.21),
+    ("Melbourne",       "Australia",     -37.81, 144.96),
+]
+
+# Conditions to generate (indication display name, downcase search key, n_trials)
+CTGOV_CONDITIONS = [
+    ("Alzheimer Disease",             30),
+    ("Amyotrophic Lateral Sclerosis", 25),
+    ("Multiple Sclerosis",            28),
+    ("Parkinson Disease",             25),
+    ("Non-Small Cell Lung Cancer",    32),
+    ("Breast Cancer",                 35),
+    ("Colorectal Cancer",             28),
+    ("Ovarian Cancer",                25),
+    ("Gaucher Disease",               15),
+    ("Fabry Disease",                 12),
+    ("Pompe Disease",                 10),
+    ("Sickle Cell Disease",           20),
+]
+
+ACTIVE_STATUSES = ["RECRUITING", "ACTIVE_NOT_RECRUITING", "ENROLLING_BY_INVITATION"]
+
+# Build all three tables together from the same NCT ID namespace
+nct_counter = 10000
+all_trial_rows, all_cond_rows, all_fac_rows = [], [], []
+
+for indication_name, n_trials in CTGOV_CONDITIONS:
+    for _ in range(n_trials):
+        nct_id = f"NCT{nct_counter:08d}"
+        nct_counter += 1
+
+        # Trial
+        status = random.choices(
+            ACTIVE_STATUSES + ["COMPLETED", "TERMINATED"],
+            weights=[35, 20, 10, 25, 10],
+        )[0]
+        all_trial_rows.append(Row(nct_id=nct_id, overall_status=status))
+
+        # Condition (both canonical and downcase)
+        all_cond_rows.append(Row(
+            nct_id=nct_id,
+            name=indication_name,
+            downcase_name=indication_name.lower(),
+        ))
+
+        # Facilities (1–3 hubs per trial)
+        n_fac = random.randint(1, 3)
+        for city, country, lat, lng in random.sample(RESEARCH_HUBS, n_fac):
+            all_fac_rows.append(Row(
+                nct_id=nct_id,
+                latitude=float(round(lat + random.uniform(-0.8, 0.8), 4)),
+                longitude=float(round(lng + random.uniform(-0.8, 0.8), 4)),
+                city=city,
+                country=country,
+                zip=str(random.randint(10000, 99999)),
+            ))
+
+# Write trials
+trial_schema = StructType([
+    StructField("nct_id",         StringType(), False),
+    StructField("overall_status", StringType(), True),
+])
+spark.createDataFrame(all_trial_rows, trial_schema) \
+    .write.format("delta").mode("overwrite") \
+    .saveAsTable(f"{CATALOG}.ctgov_gold.trials")
+print(f"ctgov_gold.trials: {len(all_trial_rows)} rows")
+
+# Write conditions
+cond_schema = StructType([
+    StructField("nct_id",       StringType(), False),
+    StructField("name",         StringType(), True),
+    StructField("downcase_name",StringType(), True),
+])
+spark.createDataFrame(all_cond_rows, cond_schema) \
+    .write.format("delta").mode("overwrite") \
+    .saveAsTable(f"{CATALOG}.clinicaltrials_gov.conditions")
+print(f"clinicaltrials_gov.conditions: {len(all_cond_rows)} rows")
+
+# Write facilities
+fac_schema = StructType([
+    StructField("nct_id",    StringType(), False),
+    StructField("latitude",  DoubleType(), True),
+    StructField("longitude", DoubleType(), True),
+    StructField("city",      StringType(), True),
+    StructField("country",   StringType(), True),
+    StructField("zip",       StringType(), True),
+])
+spark.createDataFrame(all_fac_rows, fac_schema) \
+    .write.format("delta").mode("overwrite") \
+    .saveAsTable(f"{CATALOG}.clinicaltrials_gov.facilities")
+print(f"clinicaltrials_gov.facilities: {len(all_fac_rows)} rows")
+
+# COMMAND ----------
+# ── Table 5: ml_features.gold_rwe_patient_access ──────────────────────────────
+# One row per (indication, site_id) — patient count for that indication in the
+# site's US state. Used by Protocol Explorer map to render patient density bubbles.
+#
+# patient_count_state is the number of relevant patients (by ICD-10 prefix) in
+# that state, derived from claims data. International sites get 0.
+
+# Patient count ranges by indication (rare indications = lower counts)
+INDICATION_PATIENT_RANGE = {
+    "Alzheimer's Disease":               (800,  4500),
+    "ALS (Amyotrophic Lateral Sclerosis)":(120,   600),
+    "Multiple Sclerosis":                (400,  1800),
+    "Parkinson's Disease":               (600,  2800),
+    "Non-Small Cell Lung Cancer":        (500,  2500),
+    "Breast Cancer":                     (700,  3500),
+    "Colorectal Cancer":                 (400,  2000),
+    "Ovarian Cancer":                    (200,  1000),
+    "Gaucher Disease Type 1":            (20,    120),
+    "Fabry Disease":                     (15,     90),
+    "Pompe Disease":                     (10,     70),
+    "Sickle Cell Disease":               (30,    180),
+}
+
+# Unique indications across all studies
+unique_indications = list({meta["indication"] for meta in STUDIES.values()})
+unique_site_ids    = list({sid for _, sid in study_site_pairs})
+
+rwe_rows = []
+for indication in unique_indications:
+    lo, hi = INDICATION_PATIENT_RANGE.get(indication, (100, 1000))
+    for sid in unique_site_ids:
+        if sid in _site_state_map:        # US site — has real state data
+            count = random.randint(lo, hi)
+        else:                             # International site — zero US claims
+            count = 0
+        rwe_rows.append(Row(
+            indication=indication,
+            site_id=sid,
+            patient_count_state=count,
+        ))
+
+rwe_schema = StructType([
+    StructField("indication",          StringType(),  False),
+    StructField("site_id",             StringType(),  False),
+    StructField("patient_count_state", IntegerType(), True),
+])
+spark.createDataFrame(rwe_rows, rwe_schema) \
+    .write.format("delta").mode("overwrite") \
+    .saveAsTable(f"{CATALOG}.ml_features.gold_rwe_patient_access")
+print(f"gold_rwe_patient_access: {len(rwe_rows)} rows")
+
+# COMMAND ----------
+# ── Per-site operational feature generation (shared across tables 6–9) ─────────
+# Generate stable base features per site so that values are consistent
+# between gold_model_predictions, gold_shap_values, and gold_site_feasibility_scores.
+
+def _site_features(site_id: str, study_id: str) -> dict:
+    """Generate deterministic feature values for a given site/study pair."""
+    rng = random.Random(hash(f"{site_id}:{study_id}") & 0xFFFFFFFF)
+    ta = STUDIES[study_id]["ta"]
+
+    # Base enrollment quality — sites vary systematically
+    site_quality = rng.gauss(0.55, 0.20)
+    site_quality = max(0.05, min(0.95, site_quality))
+
+    stall_prob       = round(max(0.0, min(1.0, 1.0 - site_quality + rng.gauss(0, 0.10))), 3)
+    velocity_ratio   = round(max(0.1, site_quality * 2.0 + rng.gauss(0, 0.3)), 2)
+    sf_rate          = round(max(0.05, 0.35 - site_quality * 0.25 + rng.gauss(0, 0.05)), 3)
+    dev_rate         = round(max(0.0, 0.20 - site_quality * 0.15 + rng.gauss(0, 0.03)), 3)
+    conversion_rate  = round(max(0.10, 1.0 - sf_rate + rng.gauss(0, 0.05)), 3)
+    npi_density      = round(max(0.0, min(100.0, site_quality * 80 + rng.uniform(0, 20))), 1)
+    open_payments    = round(max(0.0, min(100.0, site_quality * 70 + rng.uniform(0, 30))), 1)
+    ssq_sel_rate     = round(max(0.0, min(1.0, site_quality + rng.gauss(0, 0.15))), 3)
+    months_active    = rng.randint(6, 60)
+    age_65_plus      = round(rng.uniform(0.08, 0.55), 3)
+    avg_monthly_rands = round(max(0.0, velocity_ratio * 1.5 + rng.gauss(0, 0.3)), 2)
+    concurrency      = round(rng.uniform(0.0, 0.8), 3)
+
+    # Predicted next-month randomizations
+    predicted_rands  = round(max(0.0, avg_monthly_rands * (1 - stall_prob * 0.5) + rng.gauss(0, 0.2)), 2)
+
+    # Patient count for RWE (US sites only)
+    indication = STUDIES[study_id]["indication"]
+    lo, hi = INDICATION_PATIENT_RANGE.get(indication, (100, 1000))
+    rwe_count = rng.randint(lo, hi) if site_id in _site_state_map else 0
+
+    return {
+        "stall_prob":           stall_prob,
+        "velocity_ratio":       velocity_ratio,
+        "screen_failure_rate":  sf_rate,
+        "dev_rate":             dev_rate,
+        "conversion_rate":      conversion_rate,
+        "npi_density":          npi_density,
+        "open_payments":        open_payments,
+        "ssq_sel_rate":         ssq_sel_rate,
+        "months_active":        months_active,
+        "age_65_plus":          age_65_plus,
+        "avg_monthly_rands":    avg_monthly_rands,
+        "concurrency":          concurrency,
+        "predicted_rands":      predicted_rands,
+        "rwe_count":            rwe_count,
+        "site_quality":         site_quality,
+    }
+
+# Pre-compute features for all pairs
+pair_features = {(s, p): _site_features(p, s) for s, p in study_site_pairs}
+print(f"Pre-computed features for {len(pair_features)} site/study pairs")
+
+# COMMAND ----------
+# ── Table 6: ml_features.gold_model_predictions ───────────────────────────────
+# One row per (study_id, site_id) with is_latest = 1.
+# The app JOINs this to feasibility_scores on (site_id, study_id, is_latest=1).
+
+pred_rows = []
+for study_id, site_id in study_site_pairs:
+    f = pair_features[(study_id, site_id)]
+    pred_rows.append(Row(
+        site_id=site_id,
+        study_id=study_id,
+        predicted_next_month_rands=float(f["predicted_rands"]),
+        predicted_stall_prob=float(f["stall_prob"]),
+        is_latest=1,
+    ))
+
+pred_schema = StructType([
+    StructField("site_id",                    StringType(), False),
+    StructField("study_id",                   StringType(), False),
+    StructField("predicted_next_month_rands", DoubleType(), True),
+    StructField("predicted_stall_prob",       DoubleType(), True),
+    StructField("is_latest",                  IntegerType(), True),
+])
+spark.createDataFrame(pred_rows, pred_schema) \
+    .write.format("delta").mode("overwrite") \
+    .saveAsTable(f"{CATALOG}.ml_features.gold_model_predictions")
+print(f"gold_model_predictions: {len(pred_rows)} rows")
+
+# COMMAND ----------
+# ── Table 7: ml_features.gold_shap_values ─────────────────────────────────────
+# Top-5 SHAP driver features per (study_id, site_id), ordered by abs_shap_value.
+# The app uses these in the site detail panel to explain the stall risk prediction.
+
+shap_rows = []
+for study_id, site_id in study_site_pairs:
+    f = pair_features[(study_id, site_id)]
+    rng = random.Random(hash(f"{site_id}:{study_id}:shap") & 0xFFFFFFFF)
+
+    # Generate raw SHAP values for all features, then take top 5 by |shap|
+    raw = {}
+    for feat_name, feat_display in SHAP_FEATURES:
+        raw[feat_name] = rng.gauss(0, 0.15)
+
+    # Bias key features toward known direction
+    raw["pct_enrolled_age_65_plus"]     += (f["age_65_plus"] - 0.3) * 0.4
+    raw["screen_failure_rate"]          += f["screen_failure_rate"] * 0.6
+    raw["avg_monthly_rands_12m"]        -= f["avg_monthly_rands"] * 0.3
+    raw["site_npi_density_score"]       -= f["npi_density"] / 200.0
+    raw["open_payments_research_score"] -= f["open_payments"] / 200.0
+    raw["enrollment_velocity_ratio"]    -= f["velocity_ratio"] * 0.2
+
+    # Sort by absolute value, take top 5
+    top5 = sorted(raw.items(), key=lambda kv: abs(kv[1]), reverse=True)[:5]
+    feat_map = {fn: fd for fn, fd in SHAP_FEATURES}
+    for rank, (feat_name, shap_val) in enumerate(top5, start=1):
+        abs_val = abs(shap_val)
+        shap_rows.append(Row(
+            site_id=site_id,
+            study_id=study_id,
+            feature_name=feat_name,
+            feature_display_name=feat_map.get(feat_name, feat_name),
+            shap_value=float(round(shap_val, 4)),
+            abs_shap_value=float(round(abs_val, 4)),
+            direction="positive" if shap_val > 0 else "negative",
+            feature_value=str(round(raw.get(feat_name, 0.0) + rng.uniform(0, 1), 3)),
+            rank=rank,
+        ))
+
+shap_schema = StructType([
+    StructField("site_id",              StringType(), False),
+    StructField("study_id",             StringType(), False),
+    StructField("feature_name",         StringType(), True),
+    StructField("feature_display_name", StringType(), True),
+    StructField("shap_value",           DoubleType(), True),
+    StructField("abs_shap_value",       DoubleType(), True),
+    StructField("direction",            StringType(), True),
+    StructField("feature_value",        StringType(), True),
+    StructField("rank",                 IntegerType(), True),
+])
+spark.createDataFrame(shap_rows, shap_schema) \
+    .write.format("delta").mode("overwrite") \
+    .saveAsTable(f"{CATALOG}.ml_features.gold_shap_values")
+print(f"gold_shap_values: {len(shap_rows)} rows")
+
+# COMMAND ----------
+# ── Table 8: ml_features.gold_feasibility_dimension_drivers ───────────────────
+# Per-dimension feature breakdown for site detail deep-dive panel.
+# Dimensions: rwe, op, sel, proto — each with 3 driver features, ranked 1–3.
+# The app groups results by dimension and renders them in score breakdown cards.
+
+driver_rows = []
+for study_id, site_id in study_site_pairs:
+    f = pair_features[(study_id, site_id)]
+
+    # Dimension score (0–100) per dimension
+    dim_scores = {
+        "rwe":   min(100.0, f["rwe_count"] / 35.0),                            # patient count → percentile proxy
+        "op":    round((0.6 * (1 - f["stall_prob"]) + 0.4 * min(f["velocity_ratio"] / 2, 1)) * 100, 1),
+        "sel":   round((f["npi_density"] * 0.5 + f["open_payments"] * 0.3 + f["ssq_sel_rate"] * 20), 1),
+        "proto": round((0.5 * (1 - f["screen_failure_rate"]) + 0.25 * (1 - f["dev_rate"]) + 0.25 * f["conversion_rate"]) * 100, 1),
+    }
+    dim_scores = {k: round(max(0.0, min(100.0, v)), 1) for k, v in dim_scores.items()}
+
+    # Feature values by dimension
+    dim_feature_values = {
+        "rwe": [
+            (str(f["rwe_count"]),           f"{f['rwe_count']:,} patients",          f["rwe_count"] / 3500),
+            (str(round(f["site_quality"] * 100, 1)), f"{round(f['site_quality']*100,1)}th pctile", f["site_quality"]),
+            (str(round(f["age_65_plus"] * 100, 1)),  f"{round(f['age_65_plus']*100,1)}%",          f["age_65_plus"]),
+        ],
+        "op": [
+            (str(f["stall_prob"]),           f"{round(f['stall_prob']*100,1)}%",      f["stall_prob"]),
+            (str(f["velocity_ratio"]),       f"{f['velocity_ratio']}×",               f["velocity_ratio"] / 2),
+            (str(f["months_active"]),        f"{f['months_active']} months",          f["months_active"] / 60),
+        ],
+        "sel": [
+            (str(f["npi_density"]),          f"{f['npi_density']} / 100",             f["npi_density"] / 100),
+            (str(f["open_payments"]),        f"{f['open_payments']} / 100",           f["open_payments"] / 100),
+            (str(f["ssq_sel_rate"]),         f"{round(f['ssq_sel_rate']*100,1)}%",    f["ssq_sel_rate"]),
+        ],
+        "proto": [
+            (str(f["screen_failure_rate"]),  f"{round(f['screen_failure_rate']*100,1)}%", f["screen_failure_rate"]),
+            (str(f["dev_rate"]),             f"{round(f['dev_rate']*100,1)} per 100",     f["dev_rate"]),
+            (str(f["conversion_rate"]),      f"{round(f['conversion_rate']*100,1)}%",     f["conversion_rate"]),
+        ],
+    }
+
+    for dim, features in DIM_FEATURES.items():
+        dim_score = dim_scores[dim]
+        vals = dim_feature_values[dim]
+        total_contrib = dim_score
+        for rank_idx, (feat_name, feat_display, _unit) in enumerate(features, start=1):
+            raw_val, display_val, contribution_raw = vals[rank_idx - 1]
+            contribution = round(total_contrib * contribution_raw, 2) if rank_idx < 3 else round(total_contrib * 0.2, 2)
+            contribution_pct = round(contribution / max(total_contrib, 1) * 100, 1)
+            # Direction: higher is better for most, inverted for risk metrics
+            inverted = feat_name in ("stall_prob", "screen_failure_rate", "protocol_deviation_rate")
+            direction = ("negative" if inverted else "positive") if float(raw_val) > 0 else ("positive" if inverted else "negative")
+
+            driver_rows.append(Row(
+                study_id=study_id,
+                site_id=site_id,
+                dimension=dim,
+                rank=rank_idx,
+                feature_name=feat_name,
+                feature_display_name=feat_display,
+                feature_value_raw=float(raw_val) if raw_val.replace(".", "", 1).lstrip("-").isdigit() else 0.0,
+                feature_value_display=display_val,
+                contribution=float(contribution),
+                contribution_pct=float(contribution_pct),
+                direction=direction,
+                dimension_score=float(dim_score),
+            ))
+
+driver_schema = StructType([
+    StructField("study_id",              StringType(), False),
+    StructField("site_id",               StringType(), False),
+    StructField("dimension",             StringType(), True),
+    StructField("rank",                  IntegerType(), True),
+    StructField("feature_name",          StringType(), True),
+    StructField("feature_display_name",  StringType(), True),
+    StructField("feature_value_raw",     DoubleType(), True),
+    StructField("feature_value_display", StringType(), True),
+    StructField("contribution",          DoubleType(), True),
+    StructField("contribution_pct",      DoubleType(), True),
+    StructField("direction",             StringType(), True),
+    StructField("dimension_score",       DoubleType(), True),
+])
+spark.createDataFrame(driver_rows, driver_schema) \
+    .write.format("delta").mode("overwrite") \
+    .saveAsTable(f"{CATALOG}.ml_features.gold_feasibility_dimension_drivers")
+print(f"gold_feasibility_dimension_drivers: {len(driver_rows)} rows")
+
+# COMMAND ----------
+# ── Table 9: ml_features.gold_site_feasibility_scores ─────────────────────────
+# Primary table for the Site Feasibility view and Protocol Explorer.
+# Composite score = 0.35×RWE + 0.30×Op + 0.20×Selection + 0.15×Protocol.
+
+fs_rows = []
+for study_id, site_id in study_site_pairs:
+    f = pair_features[(study_id, site_id)]
+    meta = STUDIES[study_id]
+    rng  = random.Random(hash(f"{site_id}:{study_id}:fs") & 0xFFFFFFFF)
+
+    # Dimension scores (0–100)
+    rwe_score   = round(min(100.0, max(0.0, f["rwe_count"] / 35.0)), 1)
+    op_score    = round((0.6 * (1 - f["stall_prob"]) + 0.4 * min(f["velocity_ratio"] / 2, 1)) * 100, 1)
+    sel_score   = round(min(100.0, f["npi_density"] * 0.5 + f["open_payments"] * 0.3 + f["ssq_sel_rate"] * 20), 1)
+    proto_score = round((0.5 * (1 - f["screen_failure_rate"]) + 0.25 * (1 - f["dev_rate"]) + 0.25 * f["conversion_rate"]) * 100, 1)
+
+    for score_var in [op_score, sel_score, proto_score]:
+        score_var = max(0.0, min(100.0, score_var))
+
+    composite = round(0.35 * rwe_score + 0.30 * op_score + 0.20 * sel_score + 0.15 * proto_score, 2)
+
+    ssq_status = random.choices(SSQ_STATUSES, weights=SSQ_WEIGHTS)[0]
+    country = _site_state_map[site_id][0] if site_id in _site_state_map else _site_country_map.get(site_id, "US")
+    if site_id in _site_state_map:
+        country = "US"
+    else:
+        country = _site_country_map.get(site_id, "Unknown")
+
+    fs_rows.append(Row(
+        site_id=site_id,
+        study_id=study_id,
+        model_ta_segment=meta["ta"],
+        country=country,
+        rwe_patient_access_score=float(rwe_score),
+        rwe_patient_count_state=int(f["rwe_count"]),
+        operational_performance_score=float(max(0.0, min(100.0, op_score))),
+        site_selection_score=float(max(0.0, min(100.0, sel_score))),
+        site_selection_probability=float(f["ssq_sel_rate"]),
+        ssq_status=ssq_status,
+        protocol_execution_score=float(max(0.0, min(100.0, proto_score))),
+        composite_feasibility_score=float(composite),
+    ))
+
+fs_schema = StructType([
+    StructField("site_id",                       StringType(), False),
+    StructField("study_id",                      StringType(), False),
+    StructField("model_ta_segment",              StringType(), True),
+    StructField("country",                       StringType(), True),
+    StructField("rwe_patient_access_score",      DoubleType(), True),
+    StructField("rwe_patient_count_state",       IntegerType(), True),
+    StructField("operational_performance_score", DoubleType(), True),
+    StructField("site_selection_score",          DoubleType(), True),
+    StructField("site_selection_probability",    DoubleType(), True),
+    StructField("ssq_status",                    StringType(), True),
+    StructField("protocol_execution_score",      DoubleType(), True),
+    StructField("composite_feasibility_score",   DoubleType(), True),
+])
+spark.createDataFrame(fs_rows, fs_schema) \
+    .write.format("delta").mode("overwrite") \
+    .saveAsTable(f"{CATALOG}.ml_features.gold_site_feasibility_scores")
+print(f"gold_site_feasibility_scores: {len(fs_rows)} rows")
+
+# COMMAND ----------
+# ── Table 10: healthverity.claims_sample_synthetic ────────────────────────────
+# Minimal synthetic claims table used by the Trial Map patient-population overlay.
+# The app filters by ICD-10 code prefix and aggregates by patient_zip3 / patient_state.
+#
+# NOTE: The real dataset is samples.healthverity.claims_sample_synthetic (409k rows).
+# This seed generates ~2 000 rows — sufficient for the map overlay since the app
+# only needs state-level aggregates and does not display individual claims.
+#
+# Set HEALTHVERITY_TABLE={catalog}.healthverity.claims_sample_synthetic in app.yaml.
+
+# ICD-10 codes by indication category (from config.py INDICATION_ICD_MAP)
+ICD_CODES = {
+    "Breast Cancer":           ["C500", "C501", "C502", "C503", "C504", "C505"],
+    "Obesity":                 ["E660", "E661", "E668", "E669"],
+    "Stroke":                  ["I600", "I610", "I620", "I630", "I631", "I638", "I639", "I640"],
+    "Prostate Cancer":         ["C61"],
+    "Cancer":                  ["C189", "C349", "C509", "C569"],
+    "Heart Failure":           ["I500", "I501", "I509"],
+    "Colorectal Cancer":       ["C180", "C182", "C183", "C184", "C189", "C199", "C209"],
+    "Depression":              ["F320", "F321", "F322", "F329", "F330", "F339"],
+    "Cardiovascular Diseases": ["I200", "I210", "I219", "I250", "I509"],
+}
+
+# Add CNS / Rare codes from INDICATION_ICD_MAP extensions
+ICD_CODES["Alzheimer's Disease"]              = ["G300", "G309"]
+ICD_CODES["ALS (Amyotrophic Lateral Sclerosis)"] = ["G1221"]
+ICD_CODES["Multiple Sclerosis"]              = ["G350", "G359"]
+ICD_CODES["Parkinson's Disease"]             = ["G200"]
+ICD_CODES["Non-Small Cell Lung Cancer"]      = ["C340", "C341", "C342", "C343", "C349"]
+ICD_CODES["Ovarian Cancer"]                  = ["C560", "C561", "C569"]
+ICD_CODES["Gaucher Disease Type 1"]          = ["E7522"]
+ICD_CODES["Fabry Disease"]                   = ["E7521"]
+ICD_CODES["Pompe Disease"]                   = ["E7402"]
+ICD_CODES["Sickle Cell Disease"]             = ["D570", "D571", "D572", "D578", "D579"]
+
+# State → (zip3_bases) for realistic geographic variation
+STATE_ZIP3S = {state: [zip3_base] for state, zip3_base in US_STATES}
+
+hvid_counter = 1
+claims_rows = []
+
+for indication, codes in ICD_CODES.items():
+    # ~100 unique patients per indication; each has 1–5 claims
+    n_patients = random.randint(70, 130)
+    for _ in range(n_patients):
+        hvid = f"HV{hvid_counter:07d}"
+        hvid_counter += 1
+        state, zip3_base = random.choice(US_STATES)
+        zip3 = str(int(zip3_base) + random.randint(0, 9)).zfill(3)
+        n_claims = random.randint(1, 5)
+        for _ in range(n_claims):
+            icd = random.choice(codes)
+            claims_rows.append(Row(
+                hvid=hvid,
+                patient_zip3=zip3,
+                patient_state=state,
+                diagnosis_code=icd,
+            ))
+
+claims_schema = StructType([
+    StructField("hvid",           StringType(), False),
+    StructField("patient_zip3",   StringType(), True),
+    StructField("patient_state",  StringType(), True),
+    StructField("diagnosis_code", StringType(), True),
+])
+spark.createDataFrame(claims_rows, claims_schema) \
+    .write.format("delta").mode("overwrite") \
+    .saveAsTable(f"{CATALOG}.healthverity.claims_sample_synthetic")
+print(f"healthverity.claims_sample_synthetic: {len(claims_rows)} rows ({hvid_counter-1} unique patients)")
+
+# COMMAND ----------
+# MAGIC %md
+# MAGIC ## Seed Complete — Next Steps
+# MAGIC
+# MAGIC All ten tables have been written to **`{CATALOG}`**.
+# MAGIC
+# MAGIC ### Update `app.yaml`
+# MAGIC
+# MAGIC ```yaml
+# MAGIC env:
+# MAGIC   - name: UC_CATALOG
+# MAGIC     value: "<your_catalog>"        # the catalog widget value used above
+# MAGIC   - name: DATABRICKS_WAREHOUSE_ID
+# MAGIC     value: "<your_warehouse_id>"   # SQL warehouse to query Delta tables
+# MAGIC   - name: HEALTHVERITY_TABLE
+# MAGIC     value: "<your_catalog>.healthverity.claims_sample_synthetic"
+# MAGIC   - name: GENIE_SPACE_ID
+# MAGIC     value: ""                      # optional: AI/BI Genie space ID
+# MAGIC ```
+# MAGIC
+# MAGIC ### Data sizes vs. production
+# MAGIC
+# MAGIC | Table | Seed rows | Production rows | Notes |
+# MAGIC |-------|-----------|-----------------|-------|
+# MAGIC | `gold_site_feasibility_scores` | 300 | 694 | 43% — all 16 studies represented |
+# MAGIC | `gold_model_predictions` | 300 | 694 | Matches feasibility_scores |
+# MAGIC | `gold_shap_values` | ~1 500 | 4 858 | Top-5 vs top-7; full feature variety |
+# MAGIC | `gold_feasibility_dimension_drivers` | ~3 600 | ~8 300 | Same 4 dimensions, 3 drivers each |
+# MAGIC | `ctms_site_geo` | 120 | 148 | 81% — adequate state coverage |
+# MAGIC | `gold_rwe_patient_access` | ~1 440 | ~1 800 | All 12 indications × seed sites |
+# MAGIC | `clinicaltrials_gov.facilities` | ~900 | varies | Sufficient for competitor map |
+# MAGIC | `healthverity.claims_sample_synthetic` | ~2 000 | 409 000 | State-level aggregates only |
+
+# COMMAND ----------
+# Print table summary
+tables = [
+    (f"{CATALOG}.ctms_data.ctms_site_geo",                           "ctms_site_geo"),
+    (f"{CATALOG}.clinicaltrials_gov.facilities",                     "facilities"),
+    (f"{CATALOG}.ctgov_gold.trials",                                 "trials"),
+    (f"{CATALOG}.clinicaltrials_gov.conditions",                     "conditions"),
+    (f"{CATALOG}.ml_features.gold_rwe_patient_access",               "gold_rwe_patient_access"),
+    (f"{CATALOG}.ml_features.gold_model_predictions",                "gold_model_predictions"),
+    (f"{CATALOG}.ml_features.gold_shap_values",                      "gold_shap_values"),
+    (f"{CATALOG}.ml_features.gold_feasibility_dimension_drivers",    "gold_feasibility_dimension_drivers"),
+    (f"{CATALOG}.ml_features.gold_site_feasibility_scores",          "gold_site_feasibility_scores"),
+    (f"{CATALOG}.healthverity.claims_sample_synthetic",              "claims_sample_synthetic"),
+]
+
+print(f"\n{'Table':<55} {'Rows':>8}")
+print("-" * 65)
+for fqn, short in tables:
+    try:
+        n = spark.table(fqn).count()
+        print(f"{short:<55} {n:>8,}")
+    except Exception as e:
+        print(f"{short:<55} ERROR: {e}")
+print("\nSeed complete.")

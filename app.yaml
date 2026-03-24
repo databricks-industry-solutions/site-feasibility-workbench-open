@@ -1,0 +1,31 @@
+command:
+  - "python"
+  - "-m"
+  - "uvicorn"
+  - "app:app"
+  - "--host"
+  - "0.0.0.0"
+  - "--port"
+  - "8000"
+
+env:
+  # ── Required: set these to your own values ────────────────────────────────────
+  - name: "DATABRICKS_WAREHOUSE_ID"
+    value: ""            # Your Databricks SQL Warehouse ID (e.g. "abc123def456")
+
+  - name: "GENIE_SPACE_ID"
+    value: ""            # Your AI/BI Genie space ID for the Feasibility Assistant
+
+  - name: "UC_CATALOG"
+    value: ""            # Your Unity Catalog catalog name (e.g. "my_catalog")
+
+  - name: "HEALTHVERITY_TABLE"
+    value: ""            # Set to <your_catalog>.healthverity.claims_sample_synthetic after running the seed notebook
+  # ──────────────────────────────────────────────────────────────────────────────
+
+resources:
+  - name: "site-feasibility-lakebase"
+    description: "Lakebase instance used for caching map and patient data"
+    database:
+      instance_name: "site-feasibility-lakebase"   # Set to your Lakebase instance name
+      database_name: "databricks_postgres"           # Set to your Lakebase database name
