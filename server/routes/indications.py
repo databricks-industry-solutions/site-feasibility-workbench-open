@@ -10,7 +10,7 @@ from typing import Optional
 
 from fastapi import APIRouter
 
-from server.config import execute_query, ACTIVE_STATUSES
+from server.config import execute_query, ACTIVE_STATUSES, TABLES
 from server.db import execute_pg
 
 logger = logging.getLogger(__name__)
@@ -43,8 +43,8 @@ async def get_indications():
     logger.info("[indications] Lakebase not ready — using SQL API")
     sql = f"""
         SELECT c.name AS indication, COUNT(DISTINCT t.nct_id) AS trial_count
-        FROM siebenlist.ctgov_gold.trials t
-        JOIN siebenlist.clinicaltrials_gov.conditions c ON c.nct_id = t.nct_id
+        FROM {TABLES['ctgov_trials']} t
+        JOIN {TABLES['ctgov_conditions']} c ON c.nct_id = t.nct_id
         WHERE t.overall_status IN {ACTIVE_STATUSES}
         GROUP BY c.name
         ORDER BY trial_count DESC

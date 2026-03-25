@@ -3,7 +3,7 @@
 Fast path: Lakebase (PostgreSQL) — sub-100 ms once initialized.
 Fallback:  Databricks SQL Statement API — queries claims + facility centroids.
 
-Data source: {TABLES['healthverity_claims']} (synthetic RWD)
+Data source: {TABLES['rwe_claims']} (synthetic RWD)
 Geography:   ZIP3 centroids derived from trial facility coordinates.
 """
 import asyncio
@@ -108,7 +108,7 @@ def _from_sql_api(indication: str) -> dict:
                 patient_zip3,
                 patient_state,
                 COUNT(DISTINCT hvid) AS patient_count
-            FROM {TABLES['healthverity_claims']}
+            FROM {TABLES['rwe_claims']}
             WHERE patient_zip3 IS NOT NULL
               {icd_filter}
             GROUP BY patient_zip3, patient_state
@@ -125,7 +125,7 @@ def _from_sql_api(indication: str) -> dict:
 
     count_sql = f"""
         SELECT COUNT(DISTINCT hvid) AS total_patients
-        FROM {TABLES['healthverity_claims']}
+        FROM {TABLES['rwe_claims']}
         WHERE patient_zip3 IS NOT NULL
           {icd_filter}
     """

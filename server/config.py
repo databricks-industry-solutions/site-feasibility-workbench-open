@@ -15,11 +15,11 @@ IS_DATABRICKS_APP = bool(os.environ.get("DATABRICKS_APP_NAME"))
 WAREHOUSE_ID = os.environ.get("DATABRICKS_WAREHOUSE_ID", "")
 
 # Unity Catalog catalog name — set UC_CATALOG env var to your catalog.
-UC_CATALOG = os.environ.get("UC_CATALOG", "siebenlist")
+UC_CATALOG = os.environ.get("UC_CATALOG", "")
 
 # Fully-qualified table names derived from UC_CATALOG.
 # Override UC_CATALOG at deploy time; individual tables can also be overridden
-# by setting the env var directly (e.g. HEALTHVERITY_TABLE).
+# by setting the env var directly (e.g. RWE_CLAIMS_TABLE).
 TABLES: dict[str, str] = {
     "ctgov_facilities":   f"{UC_CATALOG}.clinicaltrials_gov.facilities",
     "ctgov_trials":       f"{UC_CATALOG}.ctgov_gold.trials",
@@ -30,8 +30,8 @@ TABLES: dict[str, str] = {
     "shap_values":        f"{UC_CATALOG}.ml_features.gold_shap_values",
     "dim_drivers":        f"{UC_CATALOG}.ml_features.gold_feasibility_dimension_drivers",
     "rwe_patient_access": f"{UC_CATALOG}.ml_features.gold_rwe_patient_access",
-    "healthverity_claims": os.environ.get(
-        "HEALTHVERITY_TABLE", "samples.healthverity.claims_sample_synthetic"
+    "rwe_claims": os.environ.get(
+        "RWE_CLAIMS_TABLE", ""
     ),
 }
 
@@ -43,8 +43,8 @@ if not WAREHOUSE_ID:
     )
 if not UC_CATALOG:
     logger.warning(
-        "[config] UC_CATALOG is not set — defaulting to 'siebenlist'. "
-        "Set UC_CATALOG to your Unity Catalog name."
+        "[config] UC_CATALOG is not set — data queries will fail. "
+        "Set UC_CATALOG to the Unity Catalog name used when running the seed notebook."
     )
 
 # Active trial statuses

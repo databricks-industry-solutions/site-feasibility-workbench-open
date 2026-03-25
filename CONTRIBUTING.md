@@ -32,7 +32,7 @@ If you are contributing on behalf of an organization, you confirm that you have 
 git clone https://github.com/databricks-solutions/public-site-workbench.git
 cd public-site-workbench
 cp .env.example .env
-# Fill in DATABRICKS_HOST, DATABRICKS_TOKEN, DATABRICKS_WAREHOUSE_ID, UC_CATALOG, etc.
+# Fill in DATABRICKS_WAREHOUSE_ID, UC_CATALOG, and optionally GENIE_SPACE_ID
 ```
 
 ### 2. Backend

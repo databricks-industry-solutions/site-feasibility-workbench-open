@@ -9,23 +9,25 @@ command:
   - "8000"
 
 env:
-  # ── Required: set these to your own values ────────────────────────────────────
+  # ── Required ───────────────────────────────────────────────────────────────
   - name: "DATABRICKS_WAREHOUSE_ID"
-    value: ""            # Your Databricks SQL Warehouse ID (e.g. "abc123def456")
-
-  - name: "GENIE_SPACE_ID"
-    value: ""            # Your AI/BI Genie space ID for the Feasibility Assistant
+    value: ""                          # Auto-filled by setup.sh, or set manually
 
   - name: "UC_CATALOG"
-    value: ""            # Your Unity Catalog catalog name (e.g. "my_catalog")
+    value: ""                          # Unity Catalog used in notebooks/00_seed_data.py
 
-  - name: "HEALTHVERITY_TABLE"
-    value: ""            # Set to <your_catalog>.healthverity.claims_sample_synthetic after running the seed notebook
-  # ──────────────────────────────────────────────────────────────────────────────
+  # ── Optional ───────────────────────────────────────────────────────────────
+  - name: "GENIE_SPACE_ID"
+    value: ""                          # Auto-filled by setup.sh; or run notebooks/01_create_genie_space.py
 
-resources:
-  - name: "site-feasibility-lakebase"
-    description: "Lakebase instance used for caching map and patient data"
-    database:
-      instance_name: "site-feasibility-lakebase"   # Set to your Lakebase instance name
-      database_name: "databricks_postgres"           # Set to your Lakebase database name
+  - name: "RWE_CLAIMS_TABLE"
+    value: ""                          # Defaults to <UC_CATALOG>.dbx_marketplace_rwe_synthetic.claims_sample_synthetic
+  # ──────────────────────────────────────────────────────────────────────────
+
+# ── Optional: remove this block if you do not have a Lakebase instance ──────
+# resources:
+#   - name: "your-lakebase-instance-name"
+#     description: "Lakebase instance for caching map and patient data"
+#     database:
+#       instance_name: "your-lakebase-instance-name"
+#       database_name: "databricks_postgres"

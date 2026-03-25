@@ -297,7 +297,7 @@ async def _load_patient_points(indication: str = "") -> None:
                 patient_zip3,
                 patient_state,
                 COUNT(DISTINCT hvid) AS patient_count
-            FROM {TABLES['healthverity_claims']}
+            FROM {TABLES['rwe_claims']}
             WHERE patient_zip3 IS NOT NULL
               {icd_filter}
             GROUP BY patient_zip3, patient_state
@@ -314,7 +314,7 @@ async def _load_patient_points(indication: str = "") -> None:
 
     count_sql = f"""
         SELECT COUNT(DISTINCT hvid) AS total_patients
-        FROM {TABLES['healthverity_claims']}
+        FROM {TABLES['rwe_claims']}
         WHERE patient_zip3 IS NOT NULL
           {icd_filter}
     """

@@ -175,10 +175,10 @@ MODEL_CARDS: dict[str, dict] = {
         "methodology": "Rule-based percentile ranking",
         "description": (
             "Measures patient population availability for the trial's therapeutic area "
-            "in the site's US state, using HealthVerity synthetic claims data mapped to "
-            "ICD-10 code prefixes. Sites are percentile-ranked within their TA segment."
+            "in the site's US state, using Databricks Marketplace synthetic RWE claims data "
+            "mapped to ICD-10 code prefixes. Sites are percentile-ranked within their TA segment."
         ),
-        "data_sources": ["HealthVerity Claims (synthetic, 409k claims)", "CTMS site geography"],
+        "data_sources": ["Databricks Marketplace RWE Claims (synthetic)", "CTMS site geography"],
         "formula": "PERCENT_RANK(patient_count_state) within TA × 100; non-US sites = 50 (neutral)",
         "performance": "N/A (rule-based)",
     },

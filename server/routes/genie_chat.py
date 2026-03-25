@@ -116,5 +116,5 @@ async def genie_chat(request: GenieChatRequest):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Genie chat error: {e}")
-        raise HTTPException(status_code=500, detail=f"Genie error: {str(e)}")
+        logger.error(f"Genie chat error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Genie request failed. Check that the Genie Space is configured and accessible.")
