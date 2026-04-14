@@ -104,16 +104,26 @@ export default function FeasibilityAssistant({ context, messages, setMessages }:
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: newMsgs, context }),
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        const status = res.status;
+        let errMsg = "Sorry, the assistant is unavailable right now. Please try again.";
+        if (status === 503) {
+          errMsg = "The Genie assistant is not configured. Set GENIE_SPACE_ID in app.yaml (run setup.sh) and redeploy.";
+        } else if (status === 500) {
+          errMsg = "The Genie assistant returned an error. Check that the Genie Space has been shared with the app service principal and that Databricks Assistant is enabled in your workspace settings.";
+        }
+        throw new Error(errMsg);
+      }
       const data = await res.json();
       setMessages(prev => [
         ...prev,
         { role: "assistant", content: data.answer },
       ]);
-    } catch {
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Sorry, the assistant is unavailable right now. Please try again.";
       setMessages(prev => [
         ...prev,
-        { role: "assistant", content: "Sorry, the assistant is unavailable right now. Please try again." },
+        { role: "assistant", content: msg },
       ]);
     } finally {
       setIsLoading(false);

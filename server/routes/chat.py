@@ -107,6 +107,8 @@ async def chat(request: ChatRequest):
             "sql_query": sql_query,
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Feasibility chat error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Genie request failed. Check that the Genie Space is configured and accessible.")
+        raise HTTPException(status_code=500, detail="Genie request failed. Check that the Genie Space is shared with the app service principal and that Databricks Assistant is enabled in your workspace.")

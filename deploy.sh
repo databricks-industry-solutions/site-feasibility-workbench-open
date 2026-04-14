@@ -81,6 +81,25 @@ else
   echo "  Skipping auto-grant (UC_CATALOG not set in app.yaml — run after setup.sh)"
 fi
 
+GENIE_SPACE_ID=$(python3 - <<'PYEOF' 2>/dev/null || echo ""
+lines = open("app.yaml").readlines()
+genie = ""
+for i, line in enumerate(lines):
+    if "GENIE_SPACE_ID" in line and i + 1 < len(lines):
+        val = lines[i + 1].strip().lstrip("value:").strip().strip('"').strip("'")
+        if val:
+            genie = val
+            break
+print(genie)
+PYEOF
+)
+
+if [ -n "$GENIE_SPACE_ID" ] && [ -n "$SP_CLIENT_ID" ]; then
+  echo ""
+  echo "  Reminder: share the Genie Space with the app service principal to enable the Feasibility Assistant:"
+  echo "    AI/BI -> Genie -> your space -> Share -> add ${SP_CLIENT_ID} with CAN USE"
+fi
+
 echo ""
 echo "==> Done! App deployed: $APP_NAME"
 APP_URL=$(databricks apps get "$APP_NAME" --profile "$PROFILE" --output json \
