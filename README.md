@@ -1,5 +1,9 @@
 # Clinical Trial Site Feasibility Workbench
 
+[![Databricks](https://img.shields.io/badge/Databricks-Solution_Accelerator-FF3621?style=for-the-badge&logo=databricks)](https://databricks.com)
+[![Unity Catalog](https://img.shields.io/badge/Unity_Catalog-Enabled-00A1C9?style=for-the-badge)](https://docs.databricks.com/en/data-governance/unity-catalog/index.html)
+[![Serverless](https://img.shields.io/badge/Serverless-Compute-00C851?style=for-the-badge)](https://docs.databricks.com/en/compute/serverless.html)
+
 > **Databricks Solution Accelerator** — a starting point to accelerate clinical operations site selection on the Databricks platform. Use, extend, and adapt within the terms of the [DB License](LICENSE.md).
 
 A Databricks App for clinical trial site selection and feasibility analysis. Helps clinical operations teams select, score, and shortlist investigator sites using ML-powered composite scoring, real-world evidence (RWE) patient access data, and an AI/BI Genie natural language interface — all running on a single Databricks workspace with no external dependencies.
@@ -8,6 +12,18 @@ A Databricks App for clinical trial site selection and feasibility analysis. Hel
 ![License](https://img.shields.io/badge/License-DB%20License-orange.svg)
 ![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)
 ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white)
+
+## Installation Guidelines
+
+1. Clone the project into your Databricks Workspace via **Workspace → + → Import from Git**
+
+2. Open the **Asset Bundle Editor** in the Databricks UI (the bundle icon in the left sidebar)
+
+3. Click **Deploy** to deploy the bundle resources to your workspace
+
+4. Navigate to the **Deployments** tab in the Asset Bundle UI and run `00_seed_data` to populate your Unity Catalog tables, then `01_create_genie_space` (optional) to configure the AI/BI Genie assistant
+
+> For a full step-by-step walkthrough including `app.yaml` configuration and permissions, see the [Setup Guide](#setup-guide) below.
 
 ## Features
 

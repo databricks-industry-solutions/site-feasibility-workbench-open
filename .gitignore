@@ -1,9 +1,28 @@
+# Databricks Asset Bundle files
+.databricks/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
 # Python
 __pycache__/
 *.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
 .venv/
 venv/
-.env
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
 
 # Node
 node_modules/
@@ -11,13 +30,6 @@ npm-debug.log*
 
 # Keep frontend/dist for deployment!
 
-# IDE
-.idea/
-.vscode/
-*.swp
-
-# Databricks
-.databricks/
-
-# OS
-.DS_Store
+# Environment files
+.env
+.env.local
