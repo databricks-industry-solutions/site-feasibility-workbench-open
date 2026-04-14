@@ -14,7 +14,7 @@ import glob
 from pathlib import Path
 
 # Configuration
-DATABRICKS_HOST = os.environ.get('DATABRICKS_HOST', 'https://e2-demo-field-eng.cloud.databricks.com')
+DATABRICKS_HOST = os.environ.get('DATABRICKS_HOST', '')
 DATABRICKS_TOKEN = os.environ.get('DATABRICKS_TOKEN', '')
 
 # Databricks brand colors
