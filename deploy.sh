@@ -35,6 +35,20 @@ databricks sync . "$WORKSPACE_PATH" \
   --full \
   --watch=false
 
+echo "==> Waiting for app compute to be ready..."
+for i in $(seq 1 30); do
+  COMPUTE_STATE=$(databricks apps get "$APP_NAME" --profile "$PROFILE" --output json 2>/dev/null \
+    | python3 -c "import sys,json; print(json.load(sys.stdin).get('compute_status',{}).get('state',''))" 2>/dev/null || echo "")
+  if [ "$COMPUTE_STATE" = "ACTIVE" ]; then
+    echo "  Compute ACTIVE"
+    break
+  fi
+  if [ "$i" -eq 30 ]; then
+    echo "  Warning: compute did not reach ACTIVE after 5 minutes — attempting deploy anyway"
+  fi
+  sleep 10
+done
+
 echo "==> Deploying app: $APP_NAME"
 databricks apps deploy "$APP_NAME" \
   --source-code-path "$WORKSPACE_PATH" \
