@@ -17,6 +17,7 @@ __pycache__/
 *$py.class
 *.egg-info/
 dist/
+!frontend/dist/
 build/
 .venv/
 venv/
@@ -28,7 +29,6 @@ venv/
 node_modules/
 npm-debug.log*
 
-# Keep frontend/dist for deployment!
 
 # Environment files
 .env
