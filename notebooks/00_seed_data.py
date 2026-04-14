@@ -786,6 +786,121 @@ spark.createDataFrame(claims_rows, claims_schema) \
 print(f"dbx_marketplace_rwe_synthetic.claims_sample_synthetic: {len(claims_rows)} rows ({hvid_counter-1} unique patients)")
 
 # COMMAND ----------
+# ── Tables 11–12: Silver monthly enrollment and monitoring ─────────────────────
+# Time-series grain: one row per (study_id, site_id, month_index).
+# These tables are the training input for 02_train_site_model.py.
+# Enrollment patterns are driven by each site's quality profile so the ML model
+# learns genuine signal (high-stall sites exhibit more zero-enrollment months).
+
+import datetime
+
+STUDY_PLANNED_ENROLLMENT = {
+    "CDISCPILOT01": 150, "SYNAL01": 200, "SYNAL02": 180,
+    "SYNMS01": 250, "SYNPD01": 200, "SYNPD02": 180,
+    "SYNONC01": 300, "SYNONC02": 280, "SYNONC03": 320,
+    "SYNONC04": 260, "SYNONC05": 240, "SYNONC06": 310,
+    "SYNRD01":   60, "SYNRD02":  50,  "SYNRD03":  45, "SYNRD04":  80,
+}
+N_MONTHS = 12
+STUDY_START = datetime.date(2023, 1, 1)
+
+enroll_rows = []
+monitor_rows = []
+
+for study_id, site_id in study_site_pairs:
+    f   = pair_features[(study_id, site_id)]
+    rng = random.Random(hash(f"{site_id}:{study_id}:monthly") & 0xFFFFFFFF)
+    sq  = f["site_quality"]
+
+    n_study_sites    = STUDY_SITE_COUNTS[study_id]
+    planned_per_site = max(3, round(STUDY_PLANNED_ENROLLMENT[study_id] / n_study_sites * 1.5))
+    activation_month = rng.choices([1, 1, 2, 2, 3], weights=[30, 30, 20, 15, 5])[0]
+
+    base_rate            = max(0.1, sq * 2.5)          # expected rands/month
+    stall_prob_per_month = max(0.0, min(0.85, (1.0 - sq) * 0.55))
+
+    for month in range(1, N_MONTHS + 1):
+        # month_start as YYYY-MM-DD string
+        raw_month  = STUDY_START.month + month - 1
+        yr         = STUDY_START.year + (raw_month - 1) // 12
+        mo         = (raw_month - 1) % 12 + 1
+        month_start = f"{yr:04d}-{mo:02d}-01"
+        is_active   = month >= activation_month
+
+        if not is_active:
+            rands = screens = sf = 0
+        else:
+            is_stall = rng.random() < stall_prob_per_month
+            rands    = 0 if is_stall else max(0, round(rng.gauss(base_rate, base_rate * 0.6)))
+            screens  = rands + max(0, round(rng.gauss(rands * 0.35, 0.5)))
+            sf       = screens - rands
+
+        enroll_rows.append(Row(
+            study_id=study_id,
+            site_id=site_id,
+            month_index=month,
+            month_start=month_start,
+            planned_enrollment=planned_per_site,
+            rands_this_month=rands,
+            screens_this_month=screens,
+            screen_failures_this_month=sf,
+        ))
+
+        # Monitoring activity (only meaningful when active)
+        if is_active:
+            imv_done  = 1 if month % 3 == 0 else 0
+            findings  = 1 if imv_done and rng.random() < (1 - sq) * 0.6 else 0
+            devs      = max(0, round(rng.gauss((1 - sq) * 3, 1.0)))
+            sdv_pct   = round(min(1.0, max(0.0, sq * 0.8 + rng.gauss(0, 0.1))), 3)
+            issues    = max(0, round(rng.gauss((1 - sq) * 2, 0.8)))
+        else:
+            imv_done = findings = devs = issues = 0
+            sdv_pct  = 0.0
+
+        monitor_rows.append(Row(
+            study_id=study_id,
+            site_id=site_id,
+            month_index=month,
+            month_start=month_start,
+            imv_completed=imv_done,
+            imv_with_findings=findings,
+            deviations_this_month=devs,
+            sdv_pct_verified=sdv_pct,
+            issues_opened=issues,
+        ))
+
+enroll_schema = StructType([
+    StructField("study_id",                   StringType(),  False),
+    StructField("site_id",                    StringType(),  False),
+    StructField("month_index",                IntegerType(), False),
+    StructField("month_start",                StringType(),  True),
+    StructField("planned_enrollment",         IntegerType(), True),
+    StructField("rands_this_month",           IntegerType(), True),
+    StructField("screens_this_month",         IntegerType(), True),
+    StructField("screen_failures_this_month", IntegerType(), True),
+])
+spark.createDataFrame(enroll_rows, enroll_schema) \
+    .write.format("delta").mode("overwrite") \
+    .saveAsTable(f"{CATALOG}.ctms_data.silver_site_monthly_enrollment")
+print(f"silver_site_monthly_enrollment: {len(enroll_rows)} rows")
+
+monitor_schema = StructType([
+    StructField("study_id",            StringType(),  False),
+    StructField("site_id",             StringType(),  False),
+    StructField("month_index",         IntegerType(), False),
+    StructField("month_start",         StringType(),  True),
+    StructField("imv_completed",       IntegerType(), True),
+    StructField("imv_with_findings",   IntegerType(), True),
+    StructField("deviations_this_month", IntegerType(), True),
+    StructField("sdv_pct_verified",    DoubleType(),  True),
+    StructField("issues_opened",       IntegerType(), True),
+])
+spark.createDataFrame(monitor_rows, monitor_schema) \
+    .write.format("delta").mode("overwrite") \
+    .saveAsTable(f"{CATALOG}.ctms_data.silver_site_monthly_monitoring")
+print(f"silver_site_monthly_monitoring: {len(monitor_rows)} rows")
+
+# COMMAND ----------
 # MAGIC %md
 # MAGIC ## Seed Complete — Next Steps
 # MAGIC
@@ -817,6 +932,10 @@ print(f"dbx_marketplace_rwe_synthetic.claims_sample_synthetic: {len(claims_rows)
 # MAGIC | `gold_rwe_patient_access` | ~2 160 | ~1 800 | All 12 indications × seed sites |
 # MAGIC | `clinicaltrials_gov.facilities` | ~900 | varies | Sufficient for competitor map |
 # MAGIC | `dbx_marketplace_rwe_synthetic.claims_sample_synthetic` | ~2 000 | 409 000 | State-level aggregates only |
+# MAGIC | `ctms_data.silver_site_monthly_enrollment` | ~18 720 | varies | 12 months × 1 560 site-study pairs; ML training input |
+# MAGIC | `ctms_data.silver_site_monthly_monitoring` | ~18 720 | varies | 12 months × 1 560 site-study pairs; ML training input |
+# MAGIC
+# MAGIC After seeding, run `02_train_site_model.py` to train the stall risk model and refresh gold ML tables.
 
 # COMMAND ----------
 # Print table summary
@@ -830,7 +949,9 @@ tables = [
     (f"{CATALOG}.ml_features.gold_shap_values",                      "gold_shap_values"),
     (f"{CATALOG}.ml_features.gold_feasibility_dimension_drivers",    "gold_feasibility_dimension_drivers"),
     (f"{CATALOG}.ml_features.gold_site_feasibility_scores",          "gold_site_feasibility_scores"),
-    (f"{CATALOG}.dbx_marketplace_rwe_synthetic.claims_sample_synthetic",              "claims_sample_synthetic"),
+    (f"{CATALOG}.dbx_marketplace_rwe_synthetic.claims_sample_synthetic", "claims_sample_synthetic"),
+    (f"{CATALOG}.ctms_data.silver_site_monthly_enrollment",           "silver_site_monthly_enrollment"),
+    (f"{CATALOG}.ctms_data.silver_site_monthly_monitoring",           "silver_site_monthly_monitoring"),
 ]
 
 print(f"\n{'Table':<55} {'Rows':>8}")

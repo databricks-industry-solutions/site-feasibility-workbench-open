@@ -44,7 +44,7 @@ echo "$(bold '╚═════════════════════
 echo ""
 
 # ── Step 1: Auth ───────────────────────────────────────────────────────────────
-echo "$(bold '[1/9] Verifying Databricks CLI authentication...')"
+echo "$(bold '[1/10] Verifying Databricks CLI authentication...')"
 echo "      Profile: $PROFILE"
 echo ""
 
@@ -78,7 +78,7 @@ fi
 echo ""
 
 # ── Step 2: SQL Warehouse ──────────────────────────────────────────────────────
-echo "$(bold '[2/9] Detecting SQL Warehouses...')"
+echo "$(bold '[2/10] Detecting SQL Warehouses...')"
 echo ""
 
 databricks warehouses list --profile "$PROFILE" --output json \
@@ -147,7 +147,7 @@ fi
 echo ""
 
 # ── Step 3: Unity Catalog ──────────────────────────────────────────────────────
-echo "$(bold '[3/9] Unity Catalog selection...')"
+echo "$(bold '[3/10] Unity Catalog selection...')"
 echo ""
 
 databricks catalogs list --profile "$PROFILE" --output json \
@@ -191,7 +191,7 @@ check "Catalog: $UC_CATALOG"
 echo ""
 
 # ── Step 4: Seed data ──────────────────────────────────────────────────────────
-echo "$(bold '[4/9] Seeding Unity Catalog tables...')"
+echo "$(bold '[4/10] Seeding Unity Catalog tables...')"
 echo "      Running notebooks/00_seed_data.py as a serverless job"
 echo ""
 
@@ -256,8 +256,68 @@ fi
 check "Tables seeded successfully in ${UC_CATALOG}"
 echo ""
 
+# ── Step 4b: Train site feasibility ML model ──────────────────────────────────
+echo "$(bold '[5/10] Training site feasibility stall risk model...')"
+echo "  Trains per-TA GradientBoosting classifiers on the seeded enrollment"
+echo "  time series, then refreshes gold_model_predictions, gold_shap_values,"
+echo "  gold_site_feasibility_scores, and gold_feasibility_dimension_drivers."
+echo ""
+
+MODEL_NB_PATH="/Workspace/Users/${CURRENT_USER}/${APP_NAME}-install/02_train_site_model"
+
+databricks workspace import \
+    --file notebooks/02_train_site_model.py \
+    --format SOURCE --language PYTHON --overwrite \
+    "$MODEL_NB_PATH" \
+    --profile "$PROFILE" 2>/dev/null
+
+MODEL_RESP=$(curl -s -X POST "${HOST}/api/2.1/jobs/runs/submit" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"run_name\": \"${APP_NAME}-train-model\",
+    \"tasks\": [{
+      \"task_key\": \"train\",
+      \"notebook_task\": {
+        \"notebook_path\": \"${MODEL_NB_PATH}\",
+        \"base_parameters\": {\"catalog\": \"${UC_CATALOG}\"}
+      },
+      \"environment_key\": \"default\"
+    }],
+    \"environments\": [{\"environment_key\": \"default\", \"spec\": {\"client\": \"1\"}}]
+  }")
+
+MODEL_RUN_ID=$(echo "$MODEL_RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('run_id',''))" 2>/dev/null || echo "")
+if [ -z "$MODEL_RUN_ID" ]; then
+    warn "Failed to submit model training job — gold tables will retain seed-data values"
+else
+    echo "  Job run ID: $MODEL_RUN_ID"
+    echo -n "  Waiting for completion"
+    MODEL_STATE=""
+    for i in $(seq 1 60); do
+        MODEL_STATE=$(curl -s "${HOST}/api/2.1/jobs/runs/get?run_id=${MODEL_RUN_ID}" \
+            -H "Authorization: Bearer $TOKEN" \
+            | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['state']['life_cycle_state'])" 2>/dev/null || echo "UNKNOWN")
+        if [[ "$MODEL_STATE" == "TERMINATED" || "$MODEL_STATE" == "INTERNAL_ERROR" || "$MODEL_STATE" == "SKIPPED" ]]; then
+            break
+        fi
+        echo -n "."
+        sleep 10
+    done
+    echo ""
+    MODEL_RESULT=$(curl -s "${HOST}/api/2.1/jobs/runs/get?run_id=${MODEL_RUN_ID}" \
+        -H "Authorization: Bearer $TOKEN" \
+        | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['state'].get('result_state',''))" 2>/dev/null || echo "")
+    if [ "$MODEL_RESULT" = "SUCCESS" ]; then
+        check "Model trained and gold tables refreshed"
+    else
+        warn "Model training ended with result: $MODEL_RESULT — gold tables retain seed-data values"
+    fi
+fi
+echo ""
+
 # ── Step 5: AI/BI Genie Space ─────────────────────────────────────────────────
-echo "$(bold '[5/9] AI/BI Genie Space (optional)...')"
+echo "$(bold '[6/10] AI/BI Genie Space (optional)...')"
 echo ""
 echo "  The Feasibility Assistant chat tab requires a Genie Space."
 echo "  Without it the tab returns an error; all other app features work normally."
@@ -349,7 +409,7 @@ fi
 echo ""
 
 # ── Step 6: Lakebase ───────────────────────────────────────────────────────────
-echo "$(bold '[6/9] Lakebase configuration (optional)...')"
+echo "$(bold '[7/10] Lakebase configuration (optional)...')"
 echo ""
 echo "  Lakebase caches map data for faster page loads. The app is fully"
 echo "  functional without it."
@@ -396,7 +456,7 @@ fi
 echo ""
 
 # ── Step 7: Write app.yaml ─────────────────────────────────────────────────────
-echo "$(bold '[7/9] Writing app.yaml...')"
+echo "$(bold '[8/10] Writing app.yaml...')"
 echo ""
 
 RWE_TABLE="${UC_CATALOG}.dbx_marketplace_rwe_synthetic.claims_sample_synthetic"
@@ -449,7 +509,7 @@ echo "    RWE_CLAIMS_TABLE        = $RWE_TABLE"
 echo ""
 
 # ── Step 8: Create app ─────────────────────────────────────────────────────────
-echo "$(bold '[8/9] Creating and deploying the app...')"
+echo "$(bold '[9/10] Creating and deploying the app...')"
 echo ""
 
 APP_EXISTS=$(databricks apps get "$APP_NAME" --profile "$PROFILE" --output json 2>/dev/null \
@@ -513,7 +573,7 @@ check "Deployed (state: $DEPLOY_STATE)"
 echo ""
 
 # ── Step 9: Permissions ────────────────────────────────────────────────────────
-echo "$(bold '[9/9] Granting permissions...')"
+echo "$(bold '[10/10] Granting permissions...')"
 echo ""
 
 APP_JSON=$(databricks apps get "$APP_NAME" --profile "$PROFILE" --output json 2>/dev/null || echo "{}")
