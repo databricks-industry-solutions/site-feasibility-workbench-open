@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # deploy.sh — Build frontend and deploy app to Databricks
 # Usage: ./deploy.sh [--profile <profile>] [--app-name <name>]
+#
+# NOTE: app.yaml must be populated before running this script.
+# Run ./install.sh to generate app.yaml automatically, or fill in the
+# env var values manually (DATABRICKS_WAREHOUSE_ID, UC_CATALOG, etc.).
 set -euo pipefail
 
 PROFILE=${PROFILE:-DEFAULT}
