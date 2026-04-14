@@ -235,22 +235,22 @@ PROFILE=my-profile APP_NAME=my-app ./deploy.sh
 
 The app runs as a dedicated service principal with its own identity. Two permission grants are required after the app is deployed.
 
-**Find your app's service principal:**
+**Find your app's service principal client ID:**
 
 ```bash
 databricks apps get public-site-workbench --profile DEFAULT --output json \
-  | python3 -c "import sys,json; d=json.load(sys.stdin); print('SP name:', d['service_principal_name'])"
+  | python3 -c "import sys,json; d=json.load(sys.stdin); print('SP client ID:', d['service_principal_client_id'])"
 ```
 
-Or find it in the workspace UI: **Apps → public-site-workbench → Permissions**.
+Or find it in the workspace UI: **Apps → public-site-workbench → Permissions** (the UUID shown there is the client ID).
 
-**Grant Unity Catalog access** (replace `<sp-name>` with the service principal name from above):
+**Grant Unity Catalog access** (replace `<sp-client-id>` with the UUID from above):
 
 ```bash
 databricks grants update catalog your-catalog-name \
   --json '{
     "changes": [{
-      "principal": "<sp-name>",
+      "principal": "<sp-client-id>",
       "add": ["USE CATALOG", "USE SCHEMA", "SELECT"]
     }]
   }'
@@ -262,7 +262,7 @@ You can also do this through the UI: **Catalog Explorer → your catalog → Per
 
 The Genie Space is private to its creator by default. Open the space under **AI/BI → Genie**, click **Share**, and add the app's service principal with **CAN USE**.
 
-> The service principal name is the same in both grants — find it with the CLI command above or under **Apps → public-site-workbench → Permissions** in the UI.
+> Use the same `service_principal_client_id` UUID for both grants — find it with the CLI command above or under **Apps → public-site-workbench → Permissions** in the UI.
 
 ---
 
