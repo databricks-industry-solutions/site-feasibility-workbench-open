@@ -10,13 +10,21 @@ command:
 
 env:
   - name: "DATABRICKS_WAREHOUSE_ID"
-    value: "1904446d0c2b10f9"
+    value: ""
 
   - name: "UC_CATALOG"
-    value: "serverless_stable_4ck9qn_catalog"
+    value: ""
 
   - name: "GENIE_SPACE_ID"
-    value: "01f138225c841b35b442ec864083ada2"
+    value: ""
 
   - name: "RWE_CLAIMS_TABLE"
-    value: "serverless_stable_4ck9qn_catalog.dbx_marketplace_rwe_synthetic.claims_sample_synthetic"
+    value: ""
+
+# Optional: uncomment and fill in if using Databricks Lakebase (PostgreSQL)
+# resources:
+#   - name: "site-feasibility-lakebase"
+#     description: "Lakebase instance for caching map and patient data"
+#     database:
+#       instance_name: "<your-lakebase-instance-name>"
+#       database_name: "enrollment_optimizer"

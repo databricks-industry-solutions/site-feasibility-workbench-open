@@ -516,8 +516,9 @@ echo ""
 echo "$(bold '[9/9] Granting permissions...')"
 echo ""
 
-SP_CLIENT_ID=$(databricks apps get "$APP_NAME" --profile "$PROFILE" --output json \
-    | python3 -c "import sys,json; print(json.load(sys.stdin)['service_principal_client_id'])" 2>/dev/null || echo "")
+APP_JSON=$(databricks apps get "$APP_NAME" --profile "$PROFILE" --output json 2>/dev/null || echo "{}")
+SP_CLIENT_ID=$(echo "$APP_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin).get('service_principal_client_id',''))" 2>/dev/null || echo "")
+SP_DISPLAY_NAME=$(echo "$APP_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin).get('service_principal_name',''))" 2>/dev/null || echo "")
 
 # Unity Catalog grant
 if [ -n "$SP_CLIENT_ID" ]; then
@@ -535,10 +536,15 @@ if [ -n "$GENIE_SPACE_ID" ] && [ -n "$SP_CLIENT_ID" ]; then
     echo ""
     echo "    1. Go to AI/BI -> Genie in your workspace"
     echo "    2. Open the Site Feasibility Assistant space"
-    echo "    3. Click Share and add the following principal with CAN USE:"
+    echo "    3. Click Share → search for the service principal by its display name:"
     echo ""
-    echo "       SP client ID: $SP_CLIENT_ID"
+    echo "       Display name : ${SP_DISPLAY_NAME:-see workspace Apps page}"
+    echo "       Client ID    : $SP_CLIENT_ID"
     echo ""
+    echo "    4. Grant CAN USE and save."
+    echo ""
+    echo "    Note: the Share dialog uses the display name to search;"
+    echo "          the client ID (UUID) is only needed for REST API calls."
     echo "    (Genie Space sharing is not available via REST API — UI step required)"
 fi
 

@@ -426,7 +426,9 @@ def _site_features(site_id: str, study_id: str) -> dict:
     ta = STUDIES[study_id]["ta"]
 
     # Base enrollment quality — sites vary systematically
-    site_quality = rng.gauss(0.55, 0.20)
+    # Mean 0.62 gives a realistic spread: ~30% of sites score above threshold,
+    # ~30% are marginal, ~40% are clearly poor — avoids degenerate all-low distributions.
+    site_quality = rng.gauss(0.62, 0.18)
     site_quality = max(0.05, min(0.95, site_quality))
 
     stall_prob       = round(max(0.0, min(1.0, 1.0 - site_quality + rng.gauss(0, 0.10))), 3)
@@ -657,7 +659,12 @@ for study_id, site_id in study_site_pairs:
     rng  = random.Random(hash(f"{site_id}:{study_id}:fs") & 0xFFFFFFFF)
 
     # Dimension scores (0–100)
-    rwe_score   = round(min(100.0, max(0.0, f["rwe_count"] / 35.0)), 1)
+    # RWE: normalize against the indication's patient-count ceiling so that rare-disease
+    # sites (low absolute counts) still spread across the full 0-100 range rather than
+    # clustering near 0. This avoids rare/ALS/CNS indications being unshortlistable.
+    indication  = meta["indication"]
+    _rwe_hi     = INDICATION_PATIENT_RANGE.get(indication, (100, 1000))[1]
+    rwe_score   = round(min(100.0, max(0.0, f["rwe_count"] / _rwe_hi * 100.0)), 1)
     op_score    = round((0.6 * (1 - f["stall_prob"]) + 0.4 * min(f["velocity_ratio"] / 2, 1)) * 100, 1)
     sel_score   = round(min(100.0, f["npi_density"] * 0.5 + f["open_payments"] * 0.3 + f["ssq_sel_rate"] * 20), 1)
     proto_score = round((0.5 * (1 - f["screen_failure_rate"]) + 0.25 * (1 - f["dev_rate"]) + 0.25 * f["conversion_rate"]) * 100, 1)

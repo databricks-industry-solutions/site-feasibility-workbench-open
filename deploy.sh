@@ -55,8 +55,9 @@ databricks apps deploy "$APP_NAME" \
   --profile "$PROFILE"
 
 echo "==> Granting Unity Catalog permissions to app service principal..."
-SP_CLIENT_ID=$(databricks apps get "$APP_NAME" --profile "$PROFILE" --output json \
-  | python3 -c "import sys,json; print(json.load(sys.stdin)['service_principal_client_id'])" 2>/dev/null || echo "")
+APP_JSON=$(databricks apps get "$APP_NAME" --profile "$PROFILE" --output json 2>/dev/null || echo "{}")
+SP_CLIENT_ID=$(echo "$APP_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin).get('service_principal_client_id',''))" 2>/dev/null || echo "")
+SP_DISPLAY_NAME=$(echo "$APP_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin).get('service_principal_name',''))" 2>/dev/null || echo "")
 
 UC_CATALOG=$(python3 - <<'PYEOF' 2>/dev/null || echo ""
 lines = open("app.yaml").readlines()
@@ -97,7 +98,9 @@ PYEOF
 if [ -n "$GENIE_SPACE_ID" ] && [ -n "$SP_CLIENT_ID" ]; then
   echo ""
   echo "  Reminder: share the Genie Space with the app service principal to enable the Feasibility Assistant:"
-  echo "    AI/BI -> Genie -> your space -> Share -> add ${SP_CLIENT_ID} with CAN USE"
+  echo "    AI/BI -> Genie -> your space -> Share -> search for the SP by display name, grant CAN USE"
+  echo "    Display name : ${SP_DISPLAY_NAME:-see workspace Apps page}"
+  echo "    Client ID    : ${SP_CLIENT_ID}  (for REST API use only)"
 fi
 
 echo ""
