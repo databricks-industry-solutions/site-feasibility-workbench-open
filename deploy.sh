@@ -44,13 +44,18 @@ echo "==> Granting Unity Catalog permissions to app service principal..."
 SP_CLIENT_ID=$(databricks apps get "$APP_NAME" --profile "$PROFILE" --output json \
   | python3 -c "import sys,json; print(json.load(sys.stdin)['service_principal_client_id'])" 2>/dev/null || echo "")
 
-UC_CATALOG=$(python3 -c "
-import re, sys
-with open('app.yaml') as f:
-    content = f.read()
-match = re.search(r'name:\s*[\"'\'']?UC_CATALOG[\"'\'']?\s*\n\s*value:\s*[\"'\'']?([^\"'\'' \n]+)', content)
-print(match.group(1) if match and match.group(1) else '')
-" 2>/dev/null || echo "")
+UC_CATALOG=$(python3 - <<'PYEOF' 2>/dev/null || echo ""
+lines = open("app.yaml").readlines()
+catalog = ""
+for i, line in enumerate(lines):
+    if "UC_CATALOG" in line and i + 1 < len(lines):
+        val = lines[i + 1].strip().lstrip("value:").strip().strip('"').strip("'")
+        if val:
+            catalog = val
+            break
+print(catalog)
+PYEOF
+)
 
 if [ -n "$SP_CLIENT_ID" ] && [ -n "$UC_CATALOG" ]; then
   databricks grants update catalog "$UC_CATALOG" \
