@@ -216,10 +216,12 @@ for line in sys.stdin:
     echo "  Enter the number or space ID to use (or press Enter to skip):"
     read -r GN_CHOICE
     if [ -n "$GN_CHOICE" ]; then
-        GENIE_SPACE_ID=$(echo "$GENIE_RESULT" | python3 - "$GN_CHOICE" <<'PYEOF'
+        echo "$GENIE_RESULT" > "$TMPD/genie_menu.txt"
+        GENIE_SPACE_ID=$(python3 - "$TMPD/genie_menu.txt" "$GN_CHOICE" <<'PYEOF'
 import sys
-choice = sys.argv[1].strip()
-lines = [l for l in sys.stdin if l.startswith('MENU|')]
+with open(sys.argv[1]) as f:
+    lines = [l for l in f if l.startswith('MENU|')]
+choice = sys.argv[2].strip()
 try:
     idx = int(choice) - 1
     print(lines[idx].strip().split('|')[2])
