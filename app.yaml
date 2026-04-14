@@ -9,25 +9,14 @@ command:
   - "8000"
 
 env:
-  # ── Required ───────────────────────────────────────────────────────────────
   - name: "DATABRICKS_WAREHOUSE_ID"
-    value: ""                          # Auto-filled by setup.sh, or set manually
+    value: "1904446d0c2b10f9"
 
   - name: "UC_CATALOG"
-    value: ""                          # Unity Catalog used in notebooks/00_seed_data.py
+    value: "serverless_stable_4ck9qn_catalog"
 
-  # ── Optional ───────────────────────────────────────────────────────────────
   - name: "GENIE_SPACE_ID"
-    value: ""                          # Auto-filled by setup.sh; or run notebooks/01_create_genie_space.py
+    value: "01f138225c841b35b442ec864083ada2"
 
   - name: "RWE_CLAIMS_TABLE"
-    value: ""                          # Defaults to <UC_CATALOG>.dbx_marketplace_rwe_synthetic.claims_sample_synthetic
-  # ──────────────────────────────────────────────────────────────────────────
-
-# ── Optional: remove this block if you do not have a Lakebase instance ──────
-# resources:
-#   - name: "your-lakebase-instance-name"
-#     description: "Lakebase instance for caching map and patient data"
-#     database:
-#       instance_name: "your-lakebase-instance-name"
-#       database_name: "databricks_postgres"
+    value: "serverless_stable_4ck9qn_catalog.dbx_marketplace_rwe_synthetic.claims_sample_synthetic"
