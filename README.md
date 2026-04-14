@@ -17,13 +17,15 @@ A Databricks App for clinical trial site selection and feasibility analysis. Hel
 
 1. Clone the project into your Databricks Workspace via **Workspace → + → Import from Git**
 
-2. Open the **Asset Bundle Editor** in the Databricks UI (the bundle icon in the left sidebar)
+2. In the cloned repo, open `notebooks/00_seed_data.py` as a notebook, set the `catalog` widget to a catalog you own, and click **Run All** to seed your Unity Catalog tables
 
-3. Click **Deploy** to deploy the bundle resources to your workspace
+3. Open the **Asset Bundle Editor** in the Databricks UI (the bundle icon in the left sidebar), fill in `warehouse_id` and `uc_catalog` from Step 2, then click **Deploy**
 
-4. Navigate to the **Deployments** tab in the Asset Bundle UI and run `00_seed_data` to populate your Unity Catalog tables, then `01_create_genie_space` (optional) to configure the AI/BI Genie assistant
+4. After deploying, go to **Catalog Explorer → your catalog → Permissions** and grant the app's service principal (found under **Apps → public-site-workbench → Permissions**) `USE CATALOG`, `USE SCHEMA`, and `SELECT`
 
-> For a full step-by-step walkthrough including `app.yaml` configuration and permissions, see the [Setup Guide](#setup-guide) below.
+5. Optionally run `notebooks/01_create_genie_space.py` to enable the AI/BI Genie chat assistant
+
+> **Prefer the CLI?** The [Setup Guide](#setup-guide) below uses `setup.sh` and `deploy.sh` to automate Steps 2–4 — including warehouse detection, `app.yaml` configuration, and the UC permissions grant.
 
 ## Features
 
