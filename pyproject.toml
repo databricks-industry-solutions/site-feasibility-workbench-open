@@ -4,10 +4,10 @@ version = "1.0.0"
 description = "Clinical Trial Site Workbench - Interactive map of active clinical trials"
 requires-python = ">=3.10"
 dependencies = [
-    "fastapi>=0.115.0",
-    "uvicorn[standard]>=0.30.0",
-    "databricks-sdk>=0.30.0",
-    "asyncpg>=0.29.0",
+    "fastapi>=0.115.0,<1.0.0",
+    "uvicorn[standard]>=0.30.0,<1.0.0",
+    "databricks-sdk>=0.30.0,<1.0.0",
+    "asyncpg>=0.30.0,<1.0.0",
 ]
 
 [project.optional-dependencies]
