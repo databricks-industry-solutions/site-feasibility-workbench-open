@@ -17,6 +17,9 @@ variables:
   app_name:
     description: "Databricks App name"
     default: "public-site-workbench"
+  lakebase_instance_name:
+    description: "Lakebase instance name for map/assessment caching (optional — leave empty to skip)"
+    default: ""
 
 targets:
   dev:

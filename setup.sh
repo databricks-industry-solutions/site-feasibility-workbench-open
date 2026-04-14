@@ -244,10 +244,56 @@ echo ""
 echo "  Lakebase is a managed PostgreSQL instance that caches map data for"
 echo "  faster page loads. The app works without it via direct SQL queries."
 echo ""
-echo "  If you have a Lakebase instance, enter its exact name"
-echo "  (find it under Compute > Lakebase in your workspace)."
-echo "  Press Enter to skip Lakebase:"
-read -r LB_NAME
+
+LB_NAME=""
+
+# Try to auto-detect available Lakebase instances
+databricks api get /api/2.0/database-instances --profile "$PROFILE" --output json \
+    > "$TMPD/lakebase.json" 2>/dev/null || echo '{"database_instances": []}' > "$TMPD/lakebase.json"
+
+LB_COUNT=$(python3 -c "
+import json
+d = json.load(open('$TMPD/lakebase.json'))
+instances = d.get('database_instances', [])
+print(len(instances))
+" 2>/dev/null || echo "0")
+
+if [ "$LB_COUNT" -gt 0 ]; then
+    python3 - "$TMPD/lakebase.json" > "$TMPD/lb_menu.txt" <<'PYEOF'
+import json, sys
+d = json.load(open(sys.argv[1]))
+instances = d.get('database_instances', [])
+for i, inst in enumerate(instances, 1):
+    state = inst.get('state', 'UNKNOWN')
+    marker = '●' if state == 'RUNNING' else '○'
+    print(f"  {i}) {marker} {inst.get('name', '')} ({state})")
+PYEOF
+    echo "  Available Lakebase instances:"
+    cat "$TMPD/lb_menu.txt"
+    echo ""
+    echo "  Enter the number or name of the instance to use (or press Enter to skip):"
+    read -r LB_CHOICE
+    if [ -n "$LB_CHOICE" ]; then
+        LB_NAME=$(python3 - "$TMPD/lakebase.json" "$LB_CHOICE" <<'PYEOF'
+import json, sys
+d = json.load(open(sys.argv[1]))
+instances = d.get('database_instances', [])
+choice = sys.argv[2].strip()
+try:
+    idx = int(choice) - 1
+    print(instances[idx]['name'])
+except (ValueError, IndexError):
+    print(choice)
+PYEOF
+)
+    fi
+else
+    echo "  No Lakebase instances found (or listing not available)."
+    echo "  If you have an instance, enter its exact name"
+    echo "  (find it under Compute > Lakebase in your workspace)."
+    echo "  Press Enter to skip:"
+    read -r LB_NAME
+fi
 echo ""
 
 # ── Write app.yaml ────────────────────────────────────────────────────────────

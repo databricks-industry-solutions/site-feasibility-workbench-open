@@ -189,19 +189,20 @@ env:
 
   - name: "RWE_CLAIMS_TABLE"
     value: "your-catalog.dbx_marketplace_rwe_synthetic.claims_sample_synthetic"
-
-# Lakebase (optional — add this block if you created an instance in Step 3):
-# resources:
-#   - name: "your-lakebase-instance-name"
-#     description: "Lakebase instance for caching map and patient data"
-#     database:
-#       instance_name: "your-lakebase-instance-name"
-#       database_name: "databricks_postgres"
 ```
 
 **Finding your SQL Warehouse ID:** go to **SQL → SQL Warehouses**, click your warehouse, then **Connection details** — the ID is the alphanumeric string in the HTTP path.
 
-**To enable Lakebase:** uncomment the `resources:` block and replace the placeholder name with your instance name from Step 3.
+**To enable Lakebase** (if you created an instance in Step 3): add the following block at the end of `app.yaml`, replacing the placeholder name with your instance name:
+
+```yaml
+resources:
+  - name: "your-lakebase-instance-name"
+    description: "Lakebase instance for caching map and patient data"
+    database:
+      instance_name: "your-lakebase-instance-name"
+      database_name: "databricks_postgres"
+```
 
 ---
 
