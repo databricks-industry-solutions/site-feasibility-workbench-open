@@ -113,16 +113,18 @@ Upload `notebooks/00_seed_data.py` to your Databricks workspace and run it as a 
 
 | Schema | Table | ~Rows | Description |
 |--------|-------|-------|-------------|
-| `clinicaltrials_gov` | `facilities` | ~900 | Active trial sites worldwide (nct_id, city, country) |
-| `clinicaltrials_gov` | `conditions` | ~360 | Indications linked to each trial |
-| `ctgov_gold` | `trials` | ~360 | Trial status, phase, therapeutic area |
-| `ctms_data` | `ctms_site_geo` | 180 | Site geography (US state, ZIP3 centroid) |
-| `ml_features` | `gold_site_feasibility_scores` | ~1,560 | Composite feasibility score per study × site (~100 sites per protocol) |
-| `ml_features` | `gold_model_predictions` | ~1,560 | LightGBM enrollment velocity predictions |
-| `ml_features` | `gold_shap_values` | ~7,800 | SHAP feature attributions (top 5 drivers per study×site) |
-| `ml_features` | `gold_feasibility_dimension_drivers` | ~18,700 | Per-dimension score with driver labels |
-| `ml_features` | `gold_rwe_patient_access` | ~2,160 | RWE estimated patient counts by site × indication |
-| `dbx_marketplace_rwe_synthetic` | `claims_sample_synthetic` | ~2,000 | Synthetic claims records for patient-level queries |
+| `clinicaltrials_gov` | `facilities` | ~900 | **Synthetic** — mimics AACT facilities; replace with real AACT data in production |
+| `clinicaltrials_gov` | `conditions` | ~360 | **Synthetic** — mimics AACT conditions; replace with real AACT data in production |
+| `ctgov_gold` | `trials` | ~360 | **Synthetic** trial metadata (status, phase, therapeutic area) |
+| `ctms_data` | `ctms_site_geo` | 180 | **Synthetic** site geography (US state, ZIP3 centroid) |
+| `ml_features` | `gold_site_feasibility_scores` | ~1,560 | **Synthetic** composite feasibility score per study × site |
+| `ml_features` | `gold_model_predictions` | ~1,560 | **Synthetic** LightGBM enrollment velocity predictions |
+| `ml_features` | `gold_shap_values` | ~7,800 | **Synthetic** SHAP feature attributions (top 5 drivers per study×site) |
+| `ml_features` | `gold_feasibility_dimension_drivers` | ~18,700 | **Synthetic** per-dimension score with driver labels |
+| `ml_features` | `gold_rwe_patient_access` | ~2,160 | **Synthetic** RWE estimated patient counts by site × indication |
+| `dbx_marketplace_rwe_synthetic` | `claims_sample_synthetic` | ~2,000 | **Synthetic** claims records for patient-level queries |
+
+> **All data is fully synthetic.** No real patients, investigators, sites, or trial results are represented. The `clinicaltrials_gov` schema name reflects the intended production schema — in a real deployment, replace those tables with data ingested from the [AACT database](https://aact.ctti-clinicaltrials.org/) (Aggregate Analysis of ClinicalTrials.gov), which provides a free PostgreSQL mirror of the full ClinicalTrials.gov dataset.
 
 Note the catalog name — you'll use it as `UC_CATALOG` in the remaining steps.
 

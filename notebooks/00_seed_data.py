@@ -10,6 +10,14 @@
 # MAGIC (CNS, Oncology, Rare Disease), 180 investigator sites, and ~100 scored
 # MAGIC sites per protocol.
 # MAGIC
+# MAGIC > **Synthetic data notice:** All data — including the `clinicaltrials_gov` schema —
+# MAGIC > is randomly generated and does not represent real trials, sites, or patients.
+# MAGIC > In a production deployment, replace the `clinicaltrials_gov` tables with data
+# MAGIC > ingested from the [AACT database](https://aact.ctti-clinicaltrials.org/)
+# MAGIC > (Aggregate Analysis of ClinicalTrials.gov), a free PostgreSQL mirror of the
+# MAGIC > full ClinicalTrials.gov dataset maintained by the Duke Clinical Trials
+# MAGIC > Transformation Initiative (CTTI).
+# MAGIC
 # MAGIC **Run this notebook first, before deploying the app.**
 # MAGIC
 # MAGIC - Cluster: any single-node cluster, DBR 13+, no extra libraries needed
@@ -58,6 +66,11 @@ print(f"Seeding into catalog: {CATALOG}")
 # ║  No real patients, clinical sites, investigators, or trial results        ║
 # ║  are represented. Patient IDs (hvid), NPI numbers, study IDs, and        ║
 # ║  site identifiers are randomly generated for demonstration purposes only. ║
+# ║                                                                          ║
+# ║  The clinicaltrials_gov schema mirrors the structure of the AACT          ║
+# ║  database (https://aact.ctti-clinicaltrials.org/), a free PostgreSQL      ║
+# ║  mirror of the full ClinicalTrials.gov dataset. In a production           ║
+# ║  deployment, replace these synthetic tables with data ingested from AACT. ║
 # ╚══════════════════════════════════════════════════════════════════════════╝
 
 import random
