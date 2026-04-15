@@ -19,13 +19,13 @@ A Databricks App for clinical trial site selection and feasibility analysis. Hel
 
 2. In the cloned repo, open `notebooks/00_seed_data.py` as a notebook, set the `catalog` widget to a catalog you own, and click **Run All** to seed your Unity Catalog tables
 
-3. Open `notebooks/02_train_site_model.py`, set the same `catalog` widget value, and click **Run All** to train the ML stall risk model and populate the gold tables with real scores (~3–5 min)
+3. Optionally run `notebooks/01_create_genie_space.py` to enable the AI/BI Genie chat assistant
 
-4. Open the **Asset Bundle Editor** in the Databricks UI (the bundle icon in the left sidebar), fill in `warehouse_id` and `uc_catalog` from Step 2, then click **Deploy**
+4. Open `notebooks/02_train_site_model.py`, set the same `catalog` widget value, and click **Run All** to train the ML stall risk model and populate the gold tables with real scores (~3–5 min)
 
-5. After deploying, go to **Catalog Explorer → your catalog → Permissions** and grant the app's service principal (found under **Apps → public-site-workbench → Permissions**) `USE CATALOG`, `USE SCHEMA`, and `SELECT`
+5. Open the **Asset Bundle Editor** in the Databricks UI (the bundle icon in the left sidebar), fill in `warehouse_id` and `uc_catalog` from Step 2, then click **Deploy**
 
-6. Optionally run `notebooks/01_create_genie_space.py` to enable the AI/BI Genie chat assistant
+6. After deploying, go to **Catalog Explorer → your catalog → Permissions** and grant the app's service principal (found under **Apps → public-site-workbench → Permissions**) `USE CATALOG`, `USE SCHEMA`, and `SELECT`
 
 > **Prefer the CLI?** The [Setup Guide](#setup-guide) below uses `setup.sh` and `deploy.sh` to automate Steps 2–4 — including warehouse detection, `app.yaml` configuration, and the UC permissions grant.
 
@@ -91,9 +91,9 @@ graph TD
 
 > **Time to deploy:** approximately 20–30 minutes end to end.
 
-Steps 1, 4, 5, and 6 are required. Steps 2 and 3 add the Genie chat assistant and Lakebase caching respectively — the app is fully functional without them.
+Steps 1, 3, 4, and 5 are required. Steps 2 and 6 add the Genie chat assistant and Lakebase caching respectively — the app is fully functional without them.
 
-> **Tip:** `setup.sh` automates Step 4 — it detects your warehouse, lists your catalogs, finds your Genie Space, and writes `app.yaml` for you. Run it after completing Steps 1–3. Use `PROFILE=my-profile ./setup.sh` if you are not on the `DEFAULT` CLI profile.
+> **Tip:** `setup.sh` automates Step 5 — it detects your warehouse, lists your catalogs, finds your Genie Space, and writes `app.yaml` for you. Run it after completing Steps 1–4. Use `PROFILE=my-profile ./setup.sh` if you are not on the `DEFAULT` CLI profile.
 
 ---
 
@@ -134,22 +134,6 @@ Note the catalog name — you'll use it as `UC_CATALOG` in the remaining steps.
 
 ---
 
-### Step 1b — Train the ML stall risk model
-
-After the seed notebook completes, run `notebooks/02_train_site_model.py` to replace the placeholder gold table values with real ML-computed scores.
-
-Import and run it the same way as Step 1 (same cluster, same catalog widget value). This notebook:
-- Trains a per-therapeutic-area **GradientBoosting** classifier on the monthly enrollment time series generated in Step 1
-- Runs inference to compute a **stall probability** for each site × study
-- Computes **SHAP attributions** (top 5 feature drivers per site)
-- Overwrites `gold_model_predictions`, `gold_shap_values`, `gold_site_feasibility_scores`, and `gold_feasibility_dimension_drivers` with genuine model output
-
-> **Runtime:** 3–5 minutes. Requires `pip install shap` which happens automatically at the top of the notebook. The notebook is safe to re-run.
-
-Without this step the app is fully functional but the operational scores and SHAP driver charts will show seed-data placeholders rather than ML-computed values.
-
----
-
 ### Step 2 — Create the AI/BI Genie Space *(optional but recommended)*
 
 The Feasibility Assistant chat tab requires a Genie Space connected to your Unity Catalog tables. Without it the tab returns a 503 error; all other app features work normally.
@@ -158,17 +142,33 @@ The Feasibility Assistant chat tab requires a Genie Space connected to your Unit
 1. Import `notebooks/01_create_genie_space.py` into your workspace the same way as Step 1
 2. Set the `catalog` widget to the same catalog used in Step 1
 3. Leave `warehouse_id` blank — the notebook auto-detects a running warehouse
-4. Click **Run All**. When complete it prints a `GENIE_SPACE_ID` — **copy this value** if you plan to configure `app.yaml` manually (Step 4, Option B). If you use `setup.sh`, it finds the space automatically.
+4. Click **Run All**. When complete it prints a `GENIE_SPACE_ID` — **copy this value** if you plan to configure `app.yaml` manually (Step 5, Option B). If you use `setup.sh`, it finds the space automatically.
 
 **Enable Databricks Assistant** *(workspace admin action, required once)*:
 
 Go to **Settings → Workspace settings → Databricks Assistant** and toggle it on.
 
-> Genie Space sharing with the app's service principal is a post-deploy step — the service principal is not created until the app is deployed (Step 5). This is covered in Step 6.
+> Genie Space sharing with the app's service principal is a post-deploy step — the service principal is not created until the app is deployed (Step 6). This is covered in Step 7.
 
 ---
 
-### Step 3 — Create a Lakebase instance *(optional)*
+### Step 3 — Train the ML stall risk model
+
+Run `notebooks/02_train_site_model.py` to replace the placeholder gold table values with real ML-computed scores.
+
+Import and run it the same way as Step 1 (same cluster, same catalog widget value). This notebook:
+- Trains a per-therapeutic-area **GradientBoosting** classifier on the monthly enrollment time series generated in Step 1
+- Runs inference to compute a **stall probability** for each site × study
+- Computes **SHAP attributions** (top 5 feature drivers per site)
+- Overwrites `gold_model_predictions`, `gold_shap_values`, `gold_site_feasibility_scores`, and `gold_feasibility_dimension_drivers` with genuine model output
+
+> **Runtime:** 3–5 minutes. Requires `pip install shap` which happens automatically at the top of the notebook. The notebook is safe to re-run. Running it after the Genie Space is created is fine — Genie queries live Delta tables and will reflect the updated scores immediately.
+
+Without this step the app is fully functional but the operational scores and SHAP driver charts will show seed-data placeholders rather than ML-computed values.
+
+---
+
+### Step 4 — Create a Lakebase instance *(optional)*
 
 Lakebase is a managed PostgreSQL instance the app uses to cache map data and persist saved shortlists. Without it the app queries Unity Catalog directly on every page load — slower on first visit, but fully functional.
 
@@ -178,7 +178,7 @@ Lakebase is a managed PostgreSQL instance the app uses to cache map data and per
 
 ---
 
-### Step 4 — Configure app.yaml
+### Step 5 — Configure app.yaml
 
 **Option A — Automated (recommended):**
 
@@ -215,7 +215,7 @@ env:
 
 **Finding your SQL Warehouse ID:** go to **SQL → SQL Warehouses**, click your warehouse, then **Connection details** — the ID is the alphanumeric string in the HTTP path.
 
-**To enable Lakebase** (if you created an instance in Step 3): add the following block at the end of `app.yaml`, replacing the placeholder name with your instance name:
+**To enable Lakebase** (if you created an instance in Step 4): add the following block at the end of `app.yaml`, replacing the placeholder name with your instance name:
 
 ```yaml
 resources:
@@ -228,7 +228,7 @@ resources:
 
 ---
 
-### Step 5 — Create and deploy the app
+### Step 6 — Create and deploy the app
 
 **First-time only — register the app in your workspace:**
 
@@ -253,7 +253,7 @@ PROFILE=my-profile APP_NAME=my-app ./deploy.sh
 
 ---
 
-### Step 6 — Grant permissions
+### Step 7 — Grant permissions
 
 The app runs as a dedicated service principal with its own identity. Two permission grants are required after the app is deployed.
 
@@ -288,7 +288,7 @@ The Genie Space is private to its creator by default. Open the space under **AI/
 
 ---
 
-### Step 7 — Verify
+### Step 8 — Verify
 
 Check the health endpoint:
 
@@ -449,8 +449,8 @@ public-site-workbench/
 ├── .env.example              # Environment variable template for local dev
 ├── notebooks/
 │   ├── 00_seed_data.py           # Creates all 10 Unity Catalog tables (run first)
-│   ├── 02_train_site_model.py    # Trains ML stall risk model, refreshes gold tables (run second)
-│   └── 01_create_genie_space.py  # Creates AI/BI Genie Space (run third, optional)
+│   ├── 01_create_genie_space.py  # Creates AI/BI Genie Space (run second, optional)
+│   └── 02_train_site_model.py    # Trains ML stall risk model, refreshes gold tables (run third)
 ├── server/
 │   ├── config.py             # Workspace client, TABLES dict, env var resolution
 │   ├── db.py                 # Lakebase (asyncpg) connection pool
