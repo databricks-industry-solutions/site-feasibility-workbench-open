@@ -349,6 +349,15 @@ pred_out["is_latest"] = 1
 pred_out["predicted_stall_prob"]       = pred_out["predicted_stall_prob"].round(5)
 pred_out["predicted_next_month_rands"] = pred_out["predicted_next_month_rands"].round(3)
 
+# Reorder columns to match pred_schema field order.
+# spark.createDataFrame maps pandas columns by POSITION, not by name —
+# if the order doesn't match the StructType the site_id/study_id columns
+# get swapped and the JOIN in the backend returns NULL for every row.
+pred_out = pred_out[["site_id", "study_id",
+                      "predicted_next_month_rands",
+                      "predicted_stall_prob",
+                      "is_latest"]]
+
 pred_schema = StructType([
     StructField("site_id",                    StringType(),  False),
     StructField("study_id",                   StringType(),  False),
