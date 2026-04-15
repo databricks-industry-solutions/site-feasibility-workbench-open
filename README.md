@@ -474,14 +474,14 @@ public-site-workbench/
 | [FastAPI](https://pypi.org/project/fastapi/) | ≥0.115.0 | MIT |
 | [uvicorn](https://pypi.org/project/uvicorn/) | ≥0.30.0 | BSD-3-Clause |
 | [databricks-sdk](https://pypi.org/project/databricks-sdk/) | ≥0.30.0 | Apache-2.0 |
-| [asyncpg](https://pypi.org/project/asyncpg/) | ≥0.29.0 | Apache-2.0 |
+| [asyncpg](https://pypi.org/project/asyncpg/) | ≥0.30.0 | Apache-2.0 |
 
 ### Frontend
 
 | Package | Version | License |
 |---------|---------|---------|
 | [react](https://www.npmjs.com/package/react) | ^18.3.1 | MIT |
-| [react-leaflet](https://www.npmjs.com/package/react-leaflet) | ^4.2.1 | Hippocratic-2.1 |
+| [react-leaflet](https://www.npmjs.com/package/react-leaflet) | ^4.2.1 | BSD-2-Clause |
 | [@tanstack/react-query](https://www.npmjs.com/package/@tanstack/react-query) | ^5.59.0 | MIT |
 | [lucide-react](https://www.npmjs.com/package/lucide-react) | ^0.453.0 | ISC |
 | [tailwindcss](https://www.npmjs.com/package/tailwindcss) | ^3.4.14 | MIT |
