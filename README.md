@@ -34,9 +34,12 @@ databricks apps create public-site-workbench
 **Path B — Databricks Asset Bundles** *(recommended if you are already familiar with DABs)*
 ```bash
 ./setup.sh                    # populate app.yaml (same as Path A)
-databricks bundle deploy      # creates app, syncs files, deploys
+databricks bundle deploy      # creates app resource + syncs files to workspace
+# After bundle deploy, get your Databricks username, then:
+databricks apps deploy public-site-workbench \
+  --source-code-path /Workspace/Users/<your-username>/.bundle/public-site-workbench/dev/files
 ```
-> Asset bundle deploy does **not** grant Unity Catalog permissions automatically — run the grants command in [Step 8B](#step-8b--grant-permissions) after deploying.
+> Asset bundle deploy does **not** grant Unity Catalog permissions automatically — run the grants command in [Step 9B](#step-9b--grant-permissions) after deploying.
 
 **Both paths:** if you enabled the Genie Space (Step 3), share it with the app service principal after deploy: **AI/BI → Genie → your space → Share → add SP with CAN USE**
 
@@ -162,7 +165,7 @@ The Feasibility Assistant chat tab requires a Genie Space connected to your Unit
 
 Go to **Settings → Workspace settings → Databricks Assistant** and toggle it on.
 
-> Genie Space sharing with the app's service principal is a post-deploy step — the service principal is not created until the app is deployed. This is covered in Step 7A (CLI) or Step 7B (Asset Bundles).
+> Genie Space sharing with the app's service principal is a post-deploy step — the service principal is not created until the app is deployed. This is covered in Step 7A (CLI) or Step 9B (Asset Bundles).
 
 ---
 
@@ -292,7 +295,7 @@ cd frontend && npm install && npm run build && cd ..
 
 ---
 
-### Step 7B — Deploy with `databricks bundle deploy`
+### Step 7B — Create app resource with `databricks bundle deploy`
 
 ```bash
 databricks bundle deploy
@@ -308,9 +311,9 @@ With a specific target:
 databricks bundle deploy --target prod
 ```
 
-The bundle creates the app if it doesn't exist, syncs source files, and deploys. The app URL appears under **Apps** in your workspace.
+`databricks bundle deploy` does two things: it creates the app resource in your workspace (equivalent to `databricks apps create`) and syncs your source files to `/Workspace/Users/<your-username>/.bundle/public-site-workbench/dev/files`. **It does not deploy the app** — that is a separate step below.
 
-**To enable Lakebase** (if you created an instance in Step 4): uncomment and fill in the `resources:` block in `app.yaml` before deploying:
+**To enable Lakebase** (if you created an instance in Step 4): uncomment and fill in the `resources:` block in `app.yaml` before running this step:
 
 ```yaml
 resources:
@@ -323,7 +326,34 @@ resources:
 
 ---
 
-### Step 8B — Grant permissions
+### Step 8B — Deploy the app
+
+After `bundle deploy` syncs your files, run `databricks apps deploy` pointing at the workspace path where the bundle placed them:
+
+```bash
+databricks apps deploy public-site-workbench \
+  --source-code-path /Workspace/Users/<your-username>/.bundle/public-site-workbench/dev/files
+```
+
+With a custom profile:
+```bash
+databricks apps deploy public-site-workbench \
+  --source-code-path /Workspace/Users/<your-username>/.bundle/public-site-workbench/dev/files \
+  --profile my-profile
+```
+
+Replace `<your-username>` with your Databricks workspace username (e.g. `first.last@company.com`). You can find it by running:
+```bash
+databricks current-user me --output json | python3 -c "import sys,json; print(json.load(sys.stdin)['userName'])"
+```
+
+When the deploy completes, the app URL appears under **Apps** in your workspace.
+
+> If you used a custom app name via `--var="app_name=my-app"` in Step 7B, substitute that name here instead of `public-site-workbench`.
+
+---
+
+### Step 9B — Grant permissions
 
 Asset bundle deploy does not grant Unity Catalog permissions automatically. Run this after deploying.
 
@@ -385,7 +415,7 @@ To keep the app warm during a demo, leave the browser tab open and active.
 
 ### `INSUFFICIENT_PERMISSIONS` errors when the app opens
 
-The app's service principal does not have access to your Unity Catalog tables. Follow the Unity Catalog grant in **Step 6A** (CLI) or **Step 7B** (Asset Bundles) above.
+The app's service principal does not have access to your Unity Catalog tables. Follow the Unity Catalog grant in **Step 6A** (CLI) or **Step 9B** (Asset Bundles) above.
 
 To confirm which principal needs access: **Apps → public-site-workbench → Permissions** in the workspace UI.
 
