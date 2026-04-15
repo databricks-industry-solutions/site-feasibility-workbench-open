@@ -33,13 +33,10 @@ databricks apps create public-site-workbench
 
 **Path B — Databricks Asset Bundles** *(recommended if you are already familiar with DABs)*
 ```bash
-cd frontend && npm install && npm run build && cd ..   # build frontend first
-databricks bundle deploy \
-  -var="warehouse_id=<your-warehouse-id>" \
-  -var="uc_catalog=<your-catalog>" \
-  -var="genie_space_id=<your-genie-space-id>"          # omit if no Genie Space
+./setup.sh                    # populate app.yaml (same as Path A)
+databricks bundle deploy      # creates app, syncs files, deploys
 ```
-> Asset bundle deploy does **not** grant Unity Catalog permissions automatically — run the grants command in [Step 7B](#step-7b--grant-permissions) after deploying.
+> Asset bundle deploy does **not** grant Unity Catalog permissions automatically — run the grants command in [Step 8B](#step-8b--grant-permissions) after deploying.
 
 **Both paths:** if you enabled the Genie Space (Step 3), share it with the app service principal after deploy: **AI/BI → Genie → your space → Share → add SP with CAN USE**
 
@@ -271,48 +268,49 @@ Open the space under **AI/BI → Genie**, click **Share**, and add the app's ser
 
 ## Path B — Asset Bundles
 
-### Step 5B — Build the frontend
+### Step 5B — Configure app.yaml
 
-Asset bundle deploy syncs files but does not run build scripts, so build the React frontend first:
+The DAB deploy syncs your source files as-is — runtime configuration is read from `app.yaml`, not from `databricks.yml`. You must populate `app.yaml` before deploying.
 
+**Option A — Automated (recommended):**
 ```bash
-cd frontend
-npm install
-npm run build
-cd ..
+chmod +x setup.sh
+./setup.sh
 ```
 
-> If you don't have Node.js installed, skip this step — a pre-built `frontend/dist` is included in the repo and `bundle deploy` will use it.
+**Option B — Manual:** edit `app.yaml` directly (see the manual alternative in [Step 5A](#step-5a--configure-appyaml)).
 
 ---
 
-### Step 6B — Deploy with `databricks bundle deploy`
+### Step 6B — Build the frontend *(if Node.js is available)*
+
+The pre-built `frontend/dist` is committed to the repo and used automatically if Node.js is not available. If you want a fresh build:
 
 ```bash
-databricks bundle deploy \
-  -var="warehouse_id=<your-warehouse-id>" \
-  -var="uc_catalog=<your-catalog>"
+cd frontend && npm install && npm run build && cd ..
 ```
 
-With Genie Space:
+---
+
+### Step 7B — Deploy with `databricks bundle deploy`
+
 ```bash
-databricks bundle deploy \
-  -var="warehouse_id=<your-warehouse-id>" \
-  -var="uc_catalog=<your-catalog>" \
-  -var="genie_space_id=<your-genie-space-id>"
+databricks bundle deploy
 ```
 
-**Finding your SQL Warehouse ID:** go to **SQL → SQL Warehouses**, click your warehouse, then **Connection details** — the ID is the alphanumeric string in the HTTP path.
-
-Custom target or profile:
+With a custom profile or app name:
 ```bash
-databricks bundle deploy --target prod --profile my-profile \
-  -var="warehouse_id=..." -var="uc_catalog=..."
+databricks bundle deploy --profile my-profile --var="app_name=my-app"
+```
+
+With a specific target:
+```bash
+databricks bundle deploy --target prod
 ```
 
 The bundle creates the app if it doesn't exist, syncs source files, and deploys. The app URL appears under **Apps** in your workspace.
 
-**To enable Lakebase** (if you created an instance in Step 4): after deploying, uncomment and fill in the `resources:` block in `app.yaml`, then redeploy:
+**To enable Lakebase** (if you created an instance in Step 4): uncomment and fill in the `resources:` block in `app.yaml` before deploying:
 
 ```yaml
 resources:
@@ -325,7 +323,7 @@ resources:
 
 ---
 
-### Step 7B — Grant permissions
+### Step 8B — Grant permissions
 
 Asset bundle deploy does not grant Unity Catalog permissions automatically. Run this after deploying.
 
