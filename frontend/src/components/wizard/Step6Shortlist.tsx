@@ -111,6 +111,9 @@ export default function Step6Shortlist({ studyId, protocol, constraints, weights
 
   const shortlisted = allSites.filter(s => shortlist.has(s.site_id));
 
+  const hasPredictions = shortlisted.some(
+    s => s.predicted_next_month_rands !== null && s.predicted_next_month_rands > 0
+  );
   const totalAnnualCapacity = shortlisted.reduce(
     (sum, s) => sum + (s.predicted_next_month_rands ?? 0) * 12,
     0
@@ -201,7 +204,7 @@ export default function Step6Shortlist({ studyId, protocol, constraints, weights
     },
     {
       label: "Annual Capacity",
-      value: Math.round(totalAnnualCapacity),
+      value: hasPredictions ? Math.round(totalAnnualCapacity) : "—",
       className: "bg-white border border-gray-200",
       valueClass: "text-teal-600",
     },
@@ -213,19 +216,21 @@ export default function Step6Shortlist({ studyId, protocol, constraints, weights
     },
     {
       label: "Capacity vs Target",
-      value: `${coveragePct.toFixed(0)}%`,
-      className:
-        coveragePct >= 100
+      value: hasPredictions ? `${coveragePct.toFixed(0)}%` : "—",
+      className: hasPredictions
+        ? coveragePct >= 100
           ? "bg-green-50 border border-green-200"
           : coveragePct >= 80
           ? "bg-yellow-50 border border-yellow-200"
-          : "bg-red-50 border border-red-200",
-      valueClass:
-        coveragePct >= 100
+          : "bg-red-50 border border-red-200"
+        : "bg-white border border-gray-200",
+      valueClass: hasPredictions
+        ? coveragePct >= 100
           ? "text-green-700"
           : coveragePct >= 80
           ? "text-yellow-700"
-          : "text-red-700",
+          : "text-red-700"
+        : "text-gray-400",
     },
   ];
 
@@ -260,16 +265,21 @@ export default function Step6Shortlist({ studyId, protocol, constraints, weights
         ))}
       </div>
 
-      {/* Enrollment projection disclaimer */}
-      {shortlisted.length > 0 && (
+      {/* Enrollment projection disclaimer or no-predictions notice */}
+      {shortlisted.length > 0 && hasPredictions && (
         <p className="text-xs text-gray-400 italic mb-4 -mt-2">
           Annual Capacity is a model projection from current monthly enrollment velocity.
           Actual enrollment will vary due to site activation lag, patient ramp-up, and protocol amendments.
         </p>
       )}
+      {shortlisted.length > 0 && !hasPredictions && (
+        <p className="text-xs text-amber-600 italic mb-4 -mt-2">
+          Enrollment projections unavailable — run <code className="font-mono">02_train_site_model.py</code> to populate ML-based enrollment estimates.
+        </p>
+      )}
 
       {/* Capacity warning */}
-      {coveragePct < 100 && shortlisted.length > 0 && (
+      {hasPredictions && coveragePct < 100 && shortlisted.length > 0 && (
         <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 mb-6 flex items-start gap-3">
           <AlertTriangle className="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" />
           <div className="text-sm text-orange-800">
