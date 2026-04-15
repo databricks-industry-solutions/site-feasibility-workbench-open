@@ -15,19 +15,21 @@ A Databricks App for clinical trial site selection and feasibility analysis. Hel
 
 ## Installation Guidelines
 
-1. Clone the project into your Databricks Workspace via **Workspace → + → Import from Git**
+1. Clone this repo locally and open the `notebooks/` folder
 
-2. In the cloned repo, open `notebooks/00_seed_data.py` as a notebook, set the `catalog` widget to a catalog you own, and click **Run All** to seed your Unity Catalog tables
+2. Upload and run `notebooks/00_seed_data.py` in your workspace — set the `catalog` widget to a catalog you own and click **Run All** (~3–5 min)
 
-3. Optionally run `notebooks/01_create_genie_space.py` to enable the AI/BI Genie chat assistant
+3. *(Optional)* Upload and run `notebooks/01_create_genie_space.py` with the same catalog to enable the AI/BI Genie chat assistant
 
-4. Open `notebooks/02_train_site_model.py`, set the same `catalog` widget value, and click **Run All** to train the ML stall risk model and populate the gold tables with real scores (~3–5 min)
+4. Upload and run `notebooks/02_train_site_model.py` with the same catalog to train the ML stall risk model (~3–5 min)
 
-5. Open the **Asset Bundle Editor** in the Databricks UI (the bundle icon in the left sidebar), fill in `warehouse_id` and `uc_catalog` from Step 2, then click **Deploy**
+5. Run `./setup.sh` from your local clone to auto-detect your warehouse, catalog, and Genie Space and write `app.yaml`
 
-6. After deploying, go to **Catalog Explorer → your catalog → Permissions** and grant the app's service principal (found under **Apps → public-site-workbench → Permissions**) `USE CATALOG`, `USE SCHEMA`, and `SELECT`
+6. Run `databricks apps create public-site-workbench` then `./deploy.sh` to sync and deploy the app — the script also grants Unity Catalog permissions automatically
 
-> **Prefer the CLI?** The [Setup Guide](#setup-guide) below uses `setup.sh` and `deploy.sh` to automate Steps 2–4 — including warehouse detection, `app.yaml` configuration, and the UC permissions grant.
+7. *(Only if you did Step 3)* Share the Genie Space with the app service principal: **AI/BI → Genie → your space → Share → add SP with CAN USE**
+
+> See the [Setup Guide](#setup-guide) below for full details, troubleshooting, and manual configuration options.
 
 ## Features
 
