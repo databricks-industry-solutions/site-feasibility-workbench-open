@@ -39,7 +39,7 @@ databricks bundle deploy \
   -var="uc_catalog=<your-catalog>" \
   -var="genie_space_id=<your-genie-space-id>"          # omit if no Genie Space
 ```
-> Asset bundle deploy does **not** grant Unity Catalog permissions automatically — run the grants command in [Step 7](#step-7--grant-permissions) after deploying.
+> Asset bundle deploy does **not** grant Unity Catalog permissions automatically — run the grants command in [Step 7B](#step-7b--grant-permissions) after deploying.
 
 **Both paths:** if you enabled the Genie Space (Step 3), share it with the app service principal after deploy: **AI/BI → Genie → your space → Share → add SP with CAN USE**
 
@@ -165,7 +165,7 @@ The Feasibility Assistant chat tab requires a Genie Space connected to your Unit
 
 Go to **Settings → Workspace settings → Databricks Assistant** and toggle it on.
 
-> Genie Space sharing with the app's service principal is a post-deploy step — the service principal is not created until the app is deployed (Step 6). This is covered in Step 7.
+> Genie Space sharing with the app's service principal is a post-deploy step — the service principal is not created until the app is deployed. This is covered in Step 7A (CLI) or Step 7B (Asset Bundles).
 
 ---
 

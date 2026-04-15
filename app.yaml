@@ -27,4 +27,4 @@ env:
 #     description: "Lakebase instance for caching map and patient data"
 #     database:
 #       instance_name: "<your-lakebase-instance-name>"
-#       database_name: "enrollment_optimizer"
+#       database_name: "databricks_postgres"
