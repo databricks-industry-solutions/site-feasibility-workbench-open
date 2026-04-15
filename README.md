@@ -15,19 +15,33 @@ A Databricks App for clinical trial site selection and feasibility analysis. Hel
 
 ## Installation Guidelines
 
-1. Clone this repo locally and open the `notebooks/` folder
+**Steps 1–4 are the same for both deployment paths.**
 
+1. Clone this repo locally
 2. Upload and run `notebooks/00_seed_data.py` in your workspace — set the `catalog` widget to a catalog you own and click **Run All** (~3–5 min)
-
 3. *(Optional)* Upload and run `notebooks/01_create_genie_space.py` with the same catalog to enable the AI/BI Genie chat assistant
-
 4. Upload and run `notebooks/02_train_site_model.py` with the same catalog to train the ML stall risk model (~3–5 min)
 
-5. Run `./setup.sh` from your local clone to auto-detect your warehouse, catalog, and Genie Space and write `app.yaml`
+**Then choose your deployment path:**
 
-6. Run `databricks apps create public-site-workbench` then `./deploy.sh` to sync and deploy the app — the script also grants Unity Catalog permissions automatically
+**Path A — CLI scripts** *(recommended for first-time setup — auto-detects everything)*
+```bash
+./setup.sh                              # writes app.yaml interactively
+databricks apps create public-site-workbench
+./deploy.sh                             # builds frontend, syncs, deploys, grants UC permissions
+```
 
-7. *(Only if you did Step 3)* Share the Genie Space with the app service principal: **AI/BI → Genie → your space → Share → add SP with CAN USE**
+**Path B — Databricks Asset Bundles** *(recommended if you are already familiar with DABs)*
+```bash
+cd frontend && npm install && npm run build && cd ..   # build frontend first
+databricks bundle deploy \
+  -var="warehouse_id=<your-warehouse-id>" \
+  -var="uc_catalog=<your-catalog>" \
+  -var="genie_space_id=<your-genie-space-id>"          # omit if no Genie Space
+```
+> Asset bundle deploy does **not** grant Unity Catalog permissions automatically — run the grants command in [Step 7](#step-7--grant-permissions) after deploying.
+
+**Both paths:** if you enabled the Genie Space (Step 3), share it with the app service principal after deploy: **AI/BI → Genie → your space → Share → add SP with CAN USE**
 
 > See the [Setup Guide](#setup-guide) below for full details, troubleshooting, and manual configuration options.
 
@@ -93,9 +107,10 @@ graph TD
 
 > **Time to deploy:** approximately 20–30 minutes end to end.
 
-Steps 1, 3, 4, and 5 are required. Steps 2 and 6 add the Genie chat assistant and Lakebase caching respectively — the app is fully functional without them.
+Steps 1–4 prepare your data and are identical for both deployment paths. Steps 2 and 4 (Lakebase) are optional — the app is fully functional without them. After Step 4, choose either:
 
-> **Tip:** `setup.sh` automates Step 5 — it detects your warehouse, lists your catalogs, finds your Genie Space, and writes `app.yaml` for you. Run it after completing Steps 1–4. Use `PROFILE=my-profile ./setup.sh` if you are not on the `DEFAULT` CLI profile.
+- **[Path A — CLI scripts](#path-a--cli-scripts)** — `setup.sh` auto-detects your workspace settings and writes `app.yaml`; `deploy.sh` builds, syncs, deploys, and grants UC permissions in one command. Best for first-time setup.
+- **[Path B — Asset Bundles](#path-b--asset-bundles)** — single `databricks bundle deploy` command with variables passed inline. Best if you are already familiar with Databricks Asset Bundles.
 
 ---
 
@@ -180,9 +195,11 @@ Lakebase is a managed PostgreSQL instance the app uses to cache map data and per
 
 ---
 
-### Step 5 — Configure app.yaml
+---
 
-**Option A — Automated (recommended):**
+## Path A — CLI scripts
+
+### Step 5A — Configure app.yaml
 
 ```bash
 chmod +x setup.sh
@@ -194,30 +211,85 @@ chmod +x setup.sh
 - Lists available Unity Catalog catalogs for you to choose from
 - Auto-detects a matching Genie Space by name (if you ran Step 2)
 - Prompts for your Lakebase instance name (optional)
-- Writes a complete `app.yaml` and prints the next-step commands
+- Writes a complete `app.yaml` and prints next-step commands
 
-**Option B — Manual:**
+Use a custom CLI profile: `PROFILE=my-profile ./setup.sh`
 
-Edit `app.yaml` directly:
+---
 
-```yaml
-env:
-  - name: "DATABRICKS_WAREHOUSE_ID"
-    value: "your-warehouse-id"          # SQL > SQL Warehouses > your warehouse > Connection details
+### Step 6A — Create and deploy the app
 
-  - name: "UC_CATALOG"
-    value: "your-catalog-name"          # The catalog used in Step 1
+**First-time only — register the app:**
 
-  - name: "GENIE_SPACE_ID"
-    value: "your-genie-space-id"        # Printed by 01_create_genie_space.py; leave blank to skip
+```bash
+databricks apps create public-site-workbench --profile DEFAULT
+```
 
-  - name: "RWE_CLAIMS_TABLE"
-    value: "your-catalog.dbx_marketplace_rwe_synthetic.claims_sample_synthetic"
+**Deploy** (builds frontend, syncs files, deploys app, grants UC permissions automatically):
+
+```bash
+chmod +x deploy.sh
+./deploy.sh
+```
+
+Custom profile or app name: `PROFILE=my-profile APP_NAME=my-app ./deploy.sh`
+
+When complete, the script prints the app URL. You can also find it under **Apps** in your workspace.
+
+---
+
+### Step 7A — Grant Genie Space access *(only if you completed Step 2)*
+
+Open the space under **AI/BI → Genie**, click **Share**, and add the app's service principal with **CAN USE**. Find the SP display name in the deploy script output or under **Apps → public-site-workbench → Permissions**.
+
+> Unity Catalog permissions are granted automatically by `deploy.sh`. Only the Genie Space grant requires a manual step.
+
+---
+
+## Path B — Asset Bundles
+
+### Step 5B — Build the frontend
+
+Asset bundle deploy syncs files but does not run build scripts, so build the React frontend first:
+
+```bash
+cd frontend
+npm install
+npm run build
+cd ..
+```
+
+> If you don't have Node.js installed, skip this step — a pre-built `frontend/dist` is included in the repo and `bundle deploy` will use it.
+
+---
+
+### Step 6B — Deploy with `databricks bundle deploy`
+
+```bash
+databricks bundle deploy \
+  -var="warehouse_id=<your-warehouse-id>" \
+  -var="uc_catalog=<your-catalog>"
+```
+
+With Genie Space:
+```bash
+databricks bundle deploy \
+  -var="warehouse_id=<your-warehouse-id>" \
+  -var="uc_catalog=<your-catalog>" \
+  -var="genie_space_id=<your-genie-space-id>"
 ```
 
 **Finding your SQL Warehouse ID:** go to **SQL → SQL Warehouses**, click your warehouse, then **Connection details** — the ID is the alphanumeric string in the HTTP path.
 
-**To enable Lakebase** (if you created an instance in Step 4): add the following block at the end of `app.yaml`, replacing the placeholder name with your instance name:
+Custom target or profile:
+```bash
+databricks bundle deploy --target prod --profile my-profile \
+  -var="warehouse_id=..." -var="uc_catalog=..."
+```
+
+The bundle creates the app if it doesn't exist, syncs source files, and deploys. The app URL appears under **Apps** in your workspace.
+
+**To enable Lakebase** (if you created an instance in Step 4): after deploying, uncomment and fill in the `resources:` block in `app.yaml`, then redeploy:
 
 ```yaml
 resources:
@@ -230,48 +302,23 @@ resources:
 
 ---
 
-### Step 6 — Create and deploy the app
+### Step 7B — Grant permissions
 
-**First-time only — register the app in your workspace:**
+Asset bundle deploy does not grant Unity Catalog permissions automatically. Run this after deploying.
 
-```bash
-databricks apps create public-site-workbench --profile DEFAULT
-```
-
-**Deploy:**
-
-```bash
-chmod +x deploy.sh
-./deploy.sh
-```
-
-The deploy script builds the React frontend, syncs source files to your workspace, and deploys the Databricks App. When complete, the CLI prints the app URL. You can also find it under **Apps** in your workspace.
-
-**Custom CLI profile or app name:**
-
-```bash
-PROFILE=my-profile APP_NAME=my-app ./deploy.sh
-```
-
----
-
-### Step 7 — Grant permissions
-
-The app runs as a dedicated service principal with its own identity. Two permission grants are required after the app is deployed.
-
-**Find your app's service principal client ID:**
+**Get the SP client ID:**
 
 ```bash
 databricks apps get public-site-workbench --profile DEFAULT --output json \
-  | python3 -c "import sys,json; d=json.load(sys.stdin); print('SP client ID:', d['service_principal_client_id'])"
+  | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['service_principal_client_id'])"
 ```
 
-Or find it in the workspace UI: **Apps → public-site-workbench → Permissions** (the UUID shown there is the client ID).
+Or find it under **Apps → public-site-workbench → Permissions** in the workspace UI.
 
-**Grant Unity Catalog access** (replace `<sp-client-id>` with the UUID from above):
+**Grant Unity Catalog access:**
 
 ```bash
-databricks grants update catalog your-catalog-name \
+databricks grants update catalog <your-catalog> \
   --json '{
     "changes": [{
       "principal": "<sp-client-id>",
@@ -280,17 +327,11 @@ databricks grants update catalog your-catalog-name \
   }'
 ```
 
-You can also do this through the UI: **Catalog Explorer → your catalog → Permissions → Grant**.
-
-**Grant Genie Space access** *(only needed if you completed Step 2)*:
-
-The Genie Space is private to its creator by default. Open the space under **AI/BI → Genie**, click **Share**, and add the app's service principal with **CAN USE**.
-
-> Use the same `service_principal_client_id` UUID for both grants — find it with the CLI command above or under **Apps → public-site-workbench → Permissions** in the UI.
+**Grant Genie Space access** *(only if you completed Step 2)*: open the space under **AI/BI → Genie**, click **Share**, and add the SP with **CAN USE**.
 
 ---
 
-### Step 8 — Verify
+## Verify
 
 Check the health endpoint:
 
@@ -323,7 +364,7 @@ To keep the app warm during a demo, leave the browser tab open and active.
 
 ### `INSUFFICIENT_PERMISSIONS` errors when the app opens
 
-The app's service principal does not have access to your Unity Catalog tables. Follow the Unity Catalog grant in **Step 6** above.
+The app's service principal does not have access to your Unity Catalog tables. Follow the Unity Catalog grant in **Step 6A** (CLI) or **Step 7B** (Asset Bundles) above.
 
 To confirm which principal needs access: **Apps → public-site-workbench → Permissions** in the workspace UI.
 
