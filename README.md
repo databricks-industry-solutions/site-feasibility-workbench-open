@@ -33,9 +33,8 @@ databricks apps create public-site-workbench
 
 **Path B — Databricks Asset Bundles** *(recommended if you are already familiar with DABs)*
 ```bash
-./setup.sh                    # populate app.yaml (same as Path A)
-databricks bundle deploy      # creates app resource + syncs files to workspace
-# After bundle deploy, get your Databricks username, then:
+./setup.sh                    # MUST run first — populates app.yaml with real values
+databricks bundle deploy      # creates app resource + syncs files (including app.yaml) to workspace
 databricks apps deploy public-site-workbench \
   --source-code-path /Workspace/Users/<your-username>/.bundle/public-site-workbench/dev/files
 ```
@@ -296,6 +295,8 @@ cd frontend && npm install && npm run build && cd ..
 ---
 
 ### Step 7B — Create app resource with `databricks bundle deploy`
+
+> **Important:** `setup.sh` (Step 5B) must be completed and `app.yaml` must have real values before running this step. The bundle syncs `app.yaml` as-is — if it contains empty strings the app will fail to start with a format error.
 
 ```bash
 databricks bundle deploy
