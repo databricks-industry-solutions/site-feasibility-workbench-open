@@ -23,8 +23,8 @@ env:
 
 # Optional: uncomment and fill in if using Databricks Lakebase (PostgreSQL)
 # resources:
-#   - name: "site-feasibility-lakebase"
+#   - name: "your-lakebase-instance-name"
 #     description: "Lakebase instance for caching map and patient data"
 #     database:
-#       instance_name: "<your-lakebase-instance-name>"
+#       instance_name: "your-lakebase-instance-name"
 #       database_name: "databricks_postgres"

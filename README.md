@@ -159,7 +159,7 @@ The Feasibility Assistant chat tab requires a Genie Space connected to your Unit
 1. Import `notebooks/01_create_genie_space.py` into your workspace the same way as Step 1
 2. Set the `catalog` widget to the same catalog used in Step 1
 3. Leave `warehouse_id` blank — the notebook auto-detects a running warehouse
-4. Click **Run All**. When complete it prints a `GENIE_SPACE_ID` — **copy this value** if you plan to configure `app.yaml` manually (Step 5, Option B). If you use `setup.sh`, it finds the space automatically.
+4. Click **Run All**. When complete it prints a `GENIE_SPACE_ID` — **copy this value** if you plan to configure `app.yaml` manually. If you use `setup.sh`, it finds the space automatically.
 
 **Enable Databricks Assistant** *(workspace admin action, required once)*:
 
@@ -195,8 +195,6 @@ Lakebase is a managed PostgreSQL instance the app uses to cache map data and per
 
 ---
 
----
-
 ## Path A — CLI scripts
 
 ### Step 5A — Configure app.yaml
@@ -214,6 +212,31 @@ chmod +x setup.sh
 - Writes a complete `app.yaml` and prints next-step commands
 
 Use a custom CLI profile: `PROFILE=my-profile ./setup.sh`
+
+**Manual alternative** — edit `app.yaml` directly if you prefer not to run `setup.sh`:
+
+```yaml
+env:
+  - name: "DATABRICKS_WAREHOUSE_ID"
+    value: "your-warehouse-id"     # SQL > SQL Warehouses > your warehouse > Connection details
+
+  - name: "UC_CATALOG"
+    value: "your-catalog-name"     # The catalog used in Step 1
+
+  - name: "GENIE_SPACE_ID"
+    value: "your-genie-space-id"   # Printed by 01_create_genie_space.py; leave blank to skip
+
+  - name: "RWE_CLAIMS_TABLE"
+    value: "your-catalog.dbx_marketplace_rwe_synthetic.claims_sample_synthetic"
+
+# Optional: uncomment and fill in if using Lakebase (Step 4)
+# resources:
+#   - name: "your-lakebase-instance-name"
+#     description: "Lakebase instance for caching map and patient data"
+#     database:
+#       instance_name: "your-lakebase-instance-name"
+#       database_name: "databricks_postgres"
+```
 
 ---
 
