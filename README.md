@@ -182,6 +182,8 @@ Import and run it the same way as Step 1 (same cluster, same catalog widget valu
 
 Without this step the app is fully functional but the operational scores and SHAP driver charts will show seed-data placeholders rather than ML-computed values.
 
+> If you re-run this notebook after the app is already deployed, **redeploy the app** afterwards to clear cached state and pick up the updated predictions.
+
 ---
 
 ### Step 4 — Create a Lakebase instance *(optional)*
@@ -476,6 +478,27 @@ databricks apps create public-site-workbench --profile DEFAULT
 ```
 
 Then re-run the deploy.
+
+---
+
+### Shortlist page shows `—` for Pred/month on all sites
+
+The `predicted_next_month_rands` column in `ml_features.gold_model_predictions` is not joining to `ml_features.gold_site_feasibility_scores`. Diagnose with:
+
+```python
+catalog = "<your-catalog>"
+spark.sql(f"""
+  SELECT COUNT(*) AS joined_rows
+  FROM {catalog}.ml_features.gold_site_feasibility_scores s
+  JOIN {catalog}.ml_features.gold_model_predictions p
+    ON s.site_id = p.site_id AND s.study_id = p.study_id AND p.is_latest = 1
+""").display()
+
+# Verify site_id values look like SITE_001 (not study IDs like CDISCPILOT01)
+spark.sql(f"SELECT site_id, study_id, predicted_next_month_rands FROM {catalog}.ml_features.gold_model_predictions LIMIT 5").display()
+```
+
+If `joined_rows = 0` and `site_id` contains study ID values (e.g. `CDISCPILOT01`): the old version of `02_train_site_model.py` was run. Download the latest notebook from the repo, re-upload it to your workspace, and re-run it. After it completes, **redeploy the app** — the app caches query results at startup and won't reflect the updated table without a fresh deployment.
 
 ---
 
