@@ -30,6 +30,23 @@ jobs:
         run: pyright server/ app.py
         continue-on-error: true  # advisory only until stubs are complete
 
+  sca-scan:
+    name: Dependency vulnerability scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install pip-audit
+        run: pip install pip-audit
+
+      - name: Run pip-audit
+        run: pip-audit -r requirements.txt
+
   frontend-build:
     name: Frontend type check & build
     runs-on: ubuntu-latest
