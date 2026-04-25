@@ -267,7 +267,17 @@ for _, row in latest_df.iterrows():
     reg = reg_models.get(ta, reg_global)
     x   = row[FEATURES].fillna(0).values.reshape(1, -1)
     stall_p     = float(clf.predict_proba(x)[0, 1])
-    next_rands  = float(max(0.0, reg.predict(x)[0]))
+    reg_pred    = float(max(0.0, reg.predict(x)[0]))
+
+    # Blend regression with stall-adjusted trailing average.
+    # The regressor is trained on rands_this_month which includes ~20% stall
+    # (zero) months; on short (12-month) training windows it can underpredict.
+    # The floor ensures predictions never collapse below the site's recent
+    # enrollment rate discounted by its predicted stall probability.
+    trailing_avg = float(row.get("trailing_3m_avg_rands", 0.0) or 0.0)
+    floor        = trailing_avg * max(0.0, 1.0 - stall_p)
+    next_rands   = max(reg_pred, floor)
+
     stall_probs.append(stall_p)
     next_rands_preds.append(next_rands)
 
@@ -277,6 +287,9 @@ latest_df["predicted_next_month_rands"]    = next_rands_preds
 print(f"Stall prob — mean: {np.mean(stall_probs):.3f}  "
       f"p25: {np.percentile(stall_probs, 25):.3f}  "
       f"p75: {np.percentile(stall_probs, 75):.3f}")
+print(f"Next-month rands — mean: {np.mean(next_rands_preds):.3f}  "
+      f"p25: {np.percentile(next_rands_preds, 25):.3f}  "
+      f"p75: {np.percentile(next_rands_preds, 75):.3f}")
 
 # COMMAND ----------
 # ── SHAP attributions ──────────────────────────────────────────────────────────
@@ -335,6 +348,15 @@ pred_out = latest_df[["study_id", "site_id",
 pred_out["is_latest"] = 1
 pred_out["predicted_stall_prob"]       = pred_out["predicted_stall_prob"].round(5)
 pred_out["predicted_next_month_rands"] = pred_out["predicted_next_month_rands"].round(3)
+
+# Reorder columns to match pred_schema field order.
+# spark.createDataFrame maps pandas columns by POSITION, not by name —
+# if the order doesn't match the StructType the site_id/study_id columns
+# get swapped and the JOIN in the backend returns NULL for every row.
+pred_out = pred_out[["site_id", "study_id",
+                      "predicted_next_month_rands",
+                      "predicted_stall_prob",
+                      "is_latest"]]
 
 pred_schema = StructType([
     StructField("site_id",                    StringType(),  False),

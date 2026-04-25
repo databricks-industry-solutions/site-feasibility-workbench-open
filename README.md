@@ -33,13 +33,12 @@ databricks apps create public-site-workbench
 
 **Path B — Databricks Asset Bundles** *(recommended if you are already familiar with DABs)*
 ```bash
-cd frontend && npm install && npm run build && cd ..   # build frontend first
-databricks bundle deploy \
-  -var="warehouse_id=<your-warehouse-id>" \
-  -var="uc_catalog=<your-catalog>" \
-  -var="genie_space_id=<your-genie-space-id>"          # omit if no Genie Space
+./setup.sh                    # MUST run first — populates app.yaml with real values
+databricks bundle deploy      # creates app resource + syncs files (including app.yaml) to workspace
+databricks apps deploy public-site-workbench \
+  --source-code-path /Workspace/Users/<your-username>/.bundle/public-site-workbench/dev/files
 ```
-> Asset bundle deploy does **not** grant Unity Catalog permissions automatically — run the grants command in [Step 7B](#step-7b--grant-permissions) after deploying.
+> Asset bundle deploy does **not** grant Unity Catalog permissions automatically — run the grants command in [Step 9B](#step-9b--grant-permissions) after deploying.
 
 **Both paths:** if you enabled the Genie Space (Step 3), share it with the app service principal after deploy: **AI/BI → Genie → your space → Share → add SP with CAN USE**
 
@@ -166,7 +165,7 @@ The Feasibility Assistant chat tab requires a Genie Space connected to your Unit
 
 Go to **Settings → Workspace settings → Databricks Assistant** and toggle it on.
 
-> Genie Space sharing with the app's service principal is a post-deploy step — the service principal is not created until the app is deployed. This is covered in Step 7A (CLI) or Step 7B (Asset Bundles).
+> Genie Space sharing with the app's service principal is a post-deploy step — the service principal is not created until the app is deployed. This is covered in Step 7A (CLI) or Step 9B (Asset Bundles).
 
 ---
 
@@ -183,6 +182,8 @@ Import and run it the same way as Step 1 (same cluster, same catalog widget valu
 > **Runtime:** 3–5 minutes. Requires `pip install shap` which happens automatically at the top of the notebook. The notebook is safe to re-run. Running it after the Genie Space is created is fine — Genie queries live Delta tables and will reflect the updated scores immediately.
 
 Without this step the app is fully functional but the operational scores and SHAP driver charts will show seed-data placeholders rather than ML-computed values.
+
+> If you re-run this notebook after the app is already deployed, **redeploy the app** afterwards to clear cached state and pick up the updated predictions.
 
 ---
 
@@ -282,47 +283,51 @@ Open the space under **AI/BI → Genie**, click **Share**, and add the app's ser
 > **Where to run these commands:** Same as Path A — any terminal with the Databricks CLI installed (local terminal, Databricks Web Terminal, or a cloud shell). See the note at the top of [Path A](#path-a--cli-scripts) for details.
 
 ### Step 5B — Build the frontend
+### Step 5B — Configure app.yaml
 
-Asset bundle deploy syncs files but does not run build scripts, so build the React frontend first:
+The DAB deploy syncs your source files as-is — runtime configuration is read from `app.yaml`, not from `databricks.yml`. You must populate `app.yaml` before deploying.
 
+**Option A — Automated (recommended):**
 ```bash
-cd frontend
-npm install
-npm run build
-cd ..
+chmod +x setup.sh
+./setup.sh
 ```
 
-> If you don't have Node.js installed, skip this step — a pre-built `frontend/dist` is included in the repo and `bundle deploy` will use it.
+**Option B — Manual:** edit `app.yaml` directly (see the manual alternative in [Step 5A](#step-5a--configure-appyaml)).
 
 ---
 
-### Step 6B — Deploy with `databricks bundle deploy`
+### Step 6B — Build the frontend *(if Node.js is available)*
+
+The pre-built `frontend/dist` is committed to the repo and used automatically if Node.js is not available. If you want a fresh build:
 
 ```bash
-databricks bundle deploy \
-  -var="warehouse_id=<your-warehouse-id>" \
-  -var="uc_catalog=<your-catalog>"
+cd frontend && npm install && npm run build && cd ..
 ```
 
-With Genie Space:
+---
+
+### Step 7B — Create app resource with `databricks bundle deploy`
+
+> **Important:** `setup.sh` (Step 5B) must be completed and `app.yaml` must have real values before running this step. The bundle syncs `app.yaml` as-is — if it contains empty strings the app will fail to start with a format error.
+
 ```bash
-databricks bundle deploy \
-  -var="warehouse_id=<your-warehouse-id>" \
-  -var="uc_catalog=<your-catalog>" \
-  -var="genie_space_id=<your-genie-space-id>"
+databricks bundle deploy
 ```
 
-**Finding your SQL Warehouse ID:** go to **SQL → SQL Warehouses**, click your warehouse, then **Connection details** — the ID is the alphanumeric string in the HTTP path.
-
-Custom target or profile:
+With a custom profile or app name:
 ```bash
-databricks bundle deploy --target prod --profile my-profile \
-  -var="warehouse_id=..." -var="uc_catalog=..."
+databricks bundle deploy --profile my-profile --var="app_name=my-app"
 ```
 
-The bundle creates the app if it doesn't exist, syncs source files, and deploys. The app URL appears under **Apps** in your workspace.
+With a specific target:
+```bash
+databricks bundle deploy --target prod
+```
 
-**To enable Lakebase** (if you created an instance in Step 4): after deploying, uncomment and fill in the `resources:` block in `app.yaml`, then redeploy:
+`databricks bundle deploy` does two things: it creates the app resource in your workspace (equivalent to `databricks apps create`) and syncs your source files to `/Workspace/Users/<your-username>/.bundle/public-site-workbench/dev/files`. **It does not deploy the app** — that is a separate step below.
+
+**To enable Lakebase** (if you created an instance in Step 4): uncomment and fill in the `resources:` block in `app.yaml` before running this step:
 
 ```yaml
 resources:
@@ -335,7 +340,34 @@ resources:
 
 ---
 
-### Step 7B — Grant permissions
+### Step 8B — Deploy the app
+
+After `bundle deploy` syncs your files, run `databricks apps deploy` pointing at the workspace path where the bundle placed them:
+
+```bash
+databricks apps deploy public-site-workbench \
+  --source-code-path /Workspace/Users/<your-username>/.bundle/public-site-workbench/dev/files
+```
+
+With a custom profile:
+```bash
+databricks apps deploy public-site-workbench \
+  --source-code-path /Workspace/Users/<your-username>/.bundle/public-site-workbench/dev/files \
+  --profile my-profile
+```
+
+Replace `<your-username>` with your Databricks workspace username (e.g. `first.last@company.com`). You can find it by running:
+```bash
+databricks current-user me --output json | python3 -c "import sys,json; print(json.load(sys.stdin)['userName'])"
+```
+
+When the deploy completes, the app URL appears under **Apps** in your workspace.
+
+> If you used a custom app name via `--var="app_name=my-app"` in Step 7B, substitute that name here instead of `public-site-workbench`.
+
+---
+
+### Step 9B — Grant permissions
 
 Asset bundle deploy does not grant Unity Catalog permissions automatically. Run this after deploying.
 
@@ -397,7 +429,7 @@ To keep the app warm during a demo, leave the browser tab open and active.
 
 ### `INSUFFICIENT_PERMISSIONS` errors when the app opens
 
-The app's service principal does not have access to your Unity Catalog tables. Follow the Unity Catalog grant in **Step 6A** (CLI) or **Step 7B** (Asset Bundles) above.
+The app's service principal does not have access to your Unity Catalog tables. Follow the Unity Catalog grant in **Step 6A** (CLI) or **Step 9B** (Asset Bundles) above.
 
 To confirm which principal needs access: **Apps → public-site-workbench → Permissions** in the workspace UI.
 
@@ -457,6 +489,27 @@ databricks apps create public-site-workbench --profile DEFAULT
 ```
 
 Then re-run the deploy.
+
+---
+
+### Shortlist page shows `—` for Pred/month on all sites
+
+The `predicted_next_month_rands` column in `ml_features.gold_model_predictions` is not joining to `ml_features.gold_site_feasibility_scores`. Diagnose with:
+
+```python
+catalog = "<your-catalog>"
+spark.sql(f"""
+  SELECT COUNT(*) AS joined_rows
+  FROM {catalog}.ml_features.gold_site_feasibility_scores s
+  JOIN {catalog}.ml_features.gold_model_predictions p
+    ON s.site_id = p.site_id AND s.study_id = p.study_id AND p.is_latest = 1
+""").display()
+
+# Verify site_id values look like SITE_001 (not study IDs like CDISCPILOT01)
+spark.sql(f"SELECT site_id, study_id, predicted_next_month_rands FROM {catalog}.ml_features.gold_model_predictions LIMIT 5").display()
+```
+
+If `joined_rows = 0` and `site_id` contains study ID values (e.g. `CDISCPILOT01`): the old version of `02_train_site_model.py` was run. Download the latest notebook from the repo, re-upload it to your workspace, and re-run it. After it completes, **redeploy the app** — the app caches query results at startup and won't reflect the updated table without a fresh deployment.
 
 ---
 

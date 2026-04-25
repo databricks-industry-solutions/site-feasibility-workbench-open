@@ -2,24 +2,9 @@ bundle:
   name: public-site-workbench
 
 variables:
-  warehouse_id:
-    description: "Databricks SQL Warehouse ID"
-    default: ""
-  genie_space_id:
-    description: "AI/BI Genie space ID for the Feasibility Assistant"
-    default: ""
-  uc_catalog:
-    description: "Unity Catalog catalog name"
-    default: ""
-  rwe_claims_table:
-    description: "Fully-qualified RWE claims table (set after running seed notebook)"
-    default: ""
   app_name:
     description: "Databricks App name"
     default: "public-site-workbench"
-  lakebase_instance_name:
-    description: "Lakebase instance name for map/assessment caching (optional — leave empty to skip)"
-    default: ""
 
 targets:
   dev:
@@ -35,23 +20,3 @@ resources:
       name: ${var.app_name}
       description: "Clinical Trial Site Feasibility Workbench"
       source_code_path: .
-
-      config:
-        command:
-          - "python"
-          - "-m"
-          - "uvicorn"
-          - "app:app"
-          - "--host"
-          - "0.0.0.0"
-          - "--port"
-          - "8000"
-        env:
-          - name: DATABRICKS_WAREHOUSE_ID
-            value: ${var.warehouse_id}
-          - name: GENIE_SPACE_ID
-            value: ${var.genie_space_id}
-          - name: UC_CATALOG
-            value: ${var.uc_catalog}
-          - name: RWE_CLAIMS_TABLE
-            value: ${var.rwe_claims_table}
