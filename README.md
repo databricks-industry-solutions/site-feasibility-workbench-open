@@ -22,11 +22,11 @@ A Databricks App for clinical trial site selection and feasibility analysis. Hel
 3. *(Optional)* Upload and run `notebooks/01_create_genie_space.py` with the same catalog to enable the AI/BI Genie chat assistant
 4. Upload and run `notebooks/02_train_site_model.py` with the same catalog to train the ML stall risk model (~3–5 min)
 
-**Then choose your deployment path:**
+**Then choose your deployment path** *(run these commands in a local terminal or the Databricks Web Terminal — they do not re-run the notebooks above):*
 
 **Path A — CLI scripts** *(recommended for first-time setup — auto-detects everything)*
 ```bash
-./setup.sh                              # writes app.yaml interactively
+./setup.sh                              # writes app.yaml interactively (does not re-run notebooks)
 databricks apps create public-site-workbench
 ./deploy.sh                             # builds frontend, syncs, deploys, grants UC permissions
 ```
@@ -124,6 +124,7 @@ Upload `notebooks/00_seed_data.py` to your Databricks workspace and run it as a 
 **How to run:**
 1. Open the imported notebook
 2. Set the `catalog` widget to **a catalog you own** (e.g. `my_catalog`). The notebook will fail if you leave the default value unchanged.
+   > **Widget not visible?** The widget toolbar sometimes doesn't appear until after the first cell runs. If you don't see it, click **Run All** — the first cell will fail with a prompt to set the catalog. Set the catalog value in the widget that appears at the top of the notebook, then click **Run All** again from the beginning.
 3. Attach to a single-node cluster and click **Run All**
 4. The notebook takes 2–4 minutes and prints a row-count summary for all 10 tables when complete.
 
@@ -198,12 +199,19 @@ Lakebase is a managed PostgreSQL instance the app uses to cache map data and per
 
 ## Path A — CLI scripts
 
+> **Where to run these commands:** Run them in any terminal with the [Databricks CLI](https://docs.databricks.com/en/dev-tools/cli/index.html) installed and authenticated. Common options:
+> - Your **local terminal** (Mac/Linux/WSL) — install CLI via `pip install databricks-cli` or Homebrew
+> - The **Databricks Web Terminal** — available from any running All Purpose cluster under **Compute → your cluster → Web Terminal**
+> - A cloud shell (AWS CloudShell, Azure Cloud Shell, GCP Cloud Shell)
+
 ### Step 5A — Configure app.yaml
 
 ```bash
 chmod +x setup.sh
 ./setup.sh
 ```
+
+`setup.sh` **only writes `app.yaml`** — it does not run or re-run the notebooks from Steps 1–3. Those notebook steps are required first and are separate from the setup scripts.
 
 `setup.sh` connects to your workspace and:
 - Auto-detects your SQL Warehouse (selects the first running warehouse; prompts if multiple)
@@ -272,6 +280,9 @@ Open the space under **AI/BI → Genie**, click **Share**, and add the app's ser
 
 ## Path B — Asset Bundles
 
+> **Where to run these commands:** Same as Path A — any terminal with the Databricks CLI installed (local terminal, Databricks Web Terminal, or a cloud shell). See the note at the top of [Path A](#path-a--cli-scripts) for details.
+
+### Step 5B — Build the frontend
 ### Step 5B — Configure app.yaml
 
 The DAB deploy syncs your source files as-is — runtime configuration is read from `app.yaml`, not from `databricks.yml`. You must populate `app.yaml` before deploying.
